@@ -45,35 +45,19 @@ def crop_and_concat(net1, net2):
     """
     the size(net1) <= size(net2)
     """
-    # net1_shape = net1.get_shape().as_list()
-    # net2_shape = net2.get_shape().as_list()
-    # # print(net1_shape)
-    # # print(net2_shape)
-    # # if net2_shape[1] >= net1_shape[1] and net2_shape[2] >= net1_shape[2]:
-    # offsets = [0, (net2_shape[1] - net1_shape[1]) // 2, (net2_shape[2] - net1_shape[2]) // 2, 0]
-    # size = [-1, net1_shape[1], net1_shape[2], -1]
-    # net2_resize = tf.slice(net2, offsets, size)
-    # return tf.concat([net1, net2_resize], 3)
-    # # else:
-    # #     offsets = [0, (net1_shape[1] - net2_shape[1]) // 2, (net1_shape[2] - net2_shape[2]) // 2, 0]
-    # #     size = [-1, net2_shape[1], net2_shape[2], -1]
-    # #     net1_resize = tf.slice(net1, offsets, size)
-    # #     return tf.concat([net1_resize, net2], 3)
+    net1_shape = net1.get_shape().as_list()
+    net2_shape = net2.get_shape().as_list()
 
-    ## dynamic shape
-    chn1 = net1.get_shape().as_list()[-1]
-    chn2 = net2.get_shape().as_list()[-1]
-    net1_shape = tf.shape(net1)
-    net2_shape = tf.shape(net2)
-    # print(net1_shape)
-    # print(net2_shape)
-    # if net2_shape[1] >= net1_shape[1] and net2_shape[2] >= net1_shape[2]:
-    offsets = [0, (net2_shape[1] - net1_shape[1]) // 2, (net2_shape[2] - net1_shape[2]) // 2, 0]
-    size = [-1, net1_shape[1], net1_shape[2], -1]
+    net1_h, net1_w, net1_c = net1_shape[1], net1_shape[2], net1_shape[3]
+    net2_h, net2_w, net2_c = net2_shape[1], net2_shape[2], net2_shape[3]
+
+    offsets = [0, (net2_h - net1_h) // 2, (net2_w - net1_w) // 2, 0]
+    size = [-1, net1_h, net1_w, net2_c]
     net2_resize = tf.slice(net2, offsets, size)
+    net2_resize = tf.ensure_shape(net2_resize, [net2_shape[0], net1_h, net1_w, net2_c])
 
-    out = tf.concat([net1, net2_resize], 3)
-    out.set_shape([None, None, None, chn1 + chn2])
+    out = tf.concat([net1, net2_resize], axis=3)
+    out = tf.ensure_shape(out, [net1_shape[0], net1_h, net1_w, net1_c + net2_c])
     return out
 
 
@@ -121,21 +105,34 @@ class UNet:
 
     def add_placeholders(self, input_batch=None, mode='train'):
         if input_batch is None:
-            self.X = tf.compat.v1.placeholder(
-                dtype=tf.float32, shape=[None, None, None, self.X_shape[-1]], name='X'
-            )
+            if mode == "pred":
+                self.X = tf.compat.v1.placeholder(
+                    dtype=tf.float32,
+                    shape=[1, self.X_shape[0], self.X_shape[1], self.X_shape[-1]],
+                    name='X',
+                )
+            else:
+                self.X = tf.compat.v1.placeholder(
+                    dtype=tf.float32, shape=[None, None, None, self.X_shape[-1]], name='X'
+                )
+                self.X.set_shape([None, self.X_shape[0], self.X_shape[1], self.X_shape[-1]])
             self.Y = tf.compat.v1.placeholder(
                 dtype=tf.float32, shape=[None, None, None, self.n_class], name='y'
             )
+            self.Y.set_shape([None, self.Y_shape[0], self.Y_shape[1], self.n_class])
         else:
             self.X = input_batch[0]
             if mode in ["train", "valid", "test"]:
                 self.Y = input_batch[1]
             self.input_batch = input_batch
 
-        self.is_training = tf.compat.v1.placeholder(dtype=tf.bool, name="is_training")
-        # self.keep_prob = tf.placeholder(dtype=tf.float32, name="keep_prob")
-        self.drop_rate = tf.compat.v1.placeholder(dtype=tf.float32, name="drop_rate")
+        if mode == "pred":
+            self.is_training = tf.constant(False, dtype=tf.bool, name="is_training")
+            self.drop_rate = tf.constant(0.0, dtype=tf.float32, name="drop_rate")
+        else:
+            self.is_training = tf.compat.v1.placeholder(dtype=tf.bool, name="is_training")
+            # self.keep_prob = tf.placeholder(dtype=tf.float32, name="keep_prob")
+            self.drop_rate = tf.compat.v1.placeholder(dtype=tf.float32, name="drop_rate")
         # self.learning_rate = tf.placeholder_with_default(tf.constant(0.01, dtype=tf.float32), shape=[], name="learning_rate")
         # self.global_step = tf.placeholder_with_default(tf.constant(0, dtype=tf.int32), shape=[], name="global_step")
 

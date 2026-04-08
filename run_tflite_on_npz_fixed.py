@@ -184,7 +184,15 @@ def waveform_to_model_input(batch_waveform):
     return X_input, noisy_signal, nbt, nt, nch
 
 
-def run_tflite(model_path, X_input):
+def run_tflite_single(model_path, x_single):
+    x_single = np.asarray(x_single, dtype=np.float32)
+    if x_single.ndim != 4:
+        raise ValueError(f"x_single must be 4D, got shape={x_single.shape}")
+    if x_single.shape[0] != 1:
+        raise ValueError(f"x_single must have batch size 1, got shape={x_single.shape}")
+    if tuple(x_single.shape[1:]) != (31, 201, 2):
+        print(f"[WARN] Unexpected feature shape: {x_single.shape}, expected (*, 31, 201, 2)")
+
     interpreter = tf.lite.Interpreter(model_path=str(model_path))
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
@@ -192,17 +200,49 @@ def run_tflite(model_path, X_input):
     if len(input_details) != 1:
         raise RuntimeError(f"Expected 1 input, got {len(input_details)}")
 
-    interpreter.resize_tensor_input(input_details[0]["index"], list(X_input.shape), strict=False)
-    interpreter.allocate_tensors()
+    declared_shape = tuple(input_details[0]["shape"].tolist())
+    print(f"[INFO] TFLite declared input shape before allocate: {input_details[0]['shape']}")
+    print(f"[INFO] TFLite single input shape: {x_single.shape}")
 
+    if declared_shape != tuple(x_single.shape):
+        interpreter.resize_tensor_input(input_details[0]["index"], list(x_single.shape), strict=False)
+
+    interpreter.allocate_tensors()
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
 
-    x = X_input.astype(input_details[0]["dtype"])
-    interpreter.set_tensor(input_details[0]["index"], x)
+    print(f"[INFO] TFLite actual input shape after allocate: {input_details[0]['shape']}")
+
+    x_single = x_single.astype(input_details[0]["dtype"])
+    interpreter.set_tensor(input_details[0]["index"], x_single)
     interpreter.invoke()
-    y = interpreter.get_tensor(output_details[0]["index"])
-    return y, input_details, output_details
+    y_single = interpreter.get_tensor(output_details[0]["index"])
+    return y_single, input_details, output_details
+
+
+def run_tflite(model_path, X_input):
+    X_input = np.asarray(X_input, dtype=np.float32)
+    if X_input.ndim != 4:
+        raise ValueError(f"X_input must be 4D, got shape={X_input.shape}")
+
+    print(f"[INFO] Batched feature shape entering TFLite loop: {X_input.shape}")
+
+    preds_list = []
+    input_details = None
+    output_details = None
+
+    for i in range(X_input.shape[0]):
+        x_single = X_input[i : i + 1]
+        print(
+            f"[INFO] Running single-sample inference {i + 1}/{X_input.shape[0]} "
+            f"with shape {x_single.shape}"
+        )
+        y_single, input_details, output_details = run_tflite_single(model_path, x_single)
+        preds_list.append(y_single)
+
+    preds = np.concatenate(preds_list, axis=0)
+    print(f"[INFO] Final concatenated preds shape: {preds.shape}")
+    return preds, input_details, output_details
 
 
 def mask_to_waveform(preds, noisy_signal, nbt, nt, nch):

@@ -39,6 +39,9 @@ from pathlib import Path
 from typing import Generator, Iterable, List
 
 import numpy as np
+
+os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
+
 import tensorflow as tf
 
 
@@ -186,12 +189,13 @@ def main() -> None:
             output_tensors=[output_tensor],
         )
 
-        if args.quant_mode in ("dynamic", "int8"):
+        if args.quant_mode == "dynamic":
             converter.optimizations = [tf.lite.Optimize.DEFAULT]
 
         if args.quant_mode == "int8":
             if not args.calib_dir:
                 raise ValueError("--quant_mode int8 requires --calib_dir with precomputed network input features")
+            converter.optimizations = [tf.lite.Optimize.DEFAULT]
             converter.representative_dataset = lambda: representative_dataset(Path(args.calib_dir), args.max_calib_samples)
             converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
             if args.int8_io:
@@ -202,12 +206,14 @@ def main() -> None:
                     )
                 converter.inference_input_type = tf.int8
                 converter.inference_output_type = tf.int8
+        else:
+            converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS]
 
-        converter.target_spec.supported_ops = [
-            tf.lite.OpsSet.TFLITE_BUILTINS,
-            tf.lite.OpsSet.SELECT_TF_OPS,
-        ]
-        tflite_model = converter.convert()
+        try:
+            tflite_model = converter.convert()
+        except Exception:
+            print("[ERROR] Builtin-only TFLite conversion failed.")
+            raise
 
     output_tflite.parent.mkdir(parents=True, exist_ok=True)
     output_tflite.write_bytes(tflite_model)
