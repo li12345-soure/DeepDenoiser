@@ -1,0 +1,13 @@
+._*
+*.pyc
+.DS_Store
+log/
+.vscode/
+output/
+*_bak/
+test_data/
+deepdenoiser_tflite_env/
+.venv/
+venv/
+__pycache__/
+*.pyc
