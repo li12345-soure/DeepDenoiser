@@ -1,11 +1,14 @@
 #import warnings
 #warnings.filterwarnings('ignore', category=FutureWarning)
+import os
+
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
+
 import numpy as np
 import tensorflow as tf
 tf.compat.v1.disable_eager_execution()
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 import argparse
-import os
 import time
 import logging
 from model import UNet
@@ -221,7 +224,8 @@ def set_config(args, data_reader):
 
 def train_fn(args, data_reader, data_reader_valid=None):
   current_time = time.strftime("%y%m%d-%H%M%S")
-  log_dir = os.path.join(args.log_dir, current_time)
+  log_dir = os.path.abspath(os.path.normpath(os.path.join(args.log_dir, current_time)))
+  log_dir = log_dir.replace("\\", "/")
   logging.info("Training log: {}".format(log_dir))
   if not os.path.exists(log_dir):
     os.makedirs(log_dir)

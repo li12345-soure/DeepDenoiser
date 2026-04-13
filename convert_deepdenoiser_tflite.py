@@ -38,9 +38,9 @@ import sys
 from pathlib import Path
 from typing import Generator, Iterable, List
 
-import numpy as np
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
 
-os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
+import numpy as np
 
 import tensorflow as tf
 
@@ -150,6 +150,8 @@ def representative_dataset(calib_dir: Path, max_samples: int) -> Generator[List[
 def main() -> None:
     args = parse_args()
 
+    tf.compat.v1.reset_default_graph()
+
     repo_root = Path(args.repo_root)
     checkpoint_dir = Path(args.checkpoint_dir)
     output_tflite = Path(args.output_tflite)
@@ -157,12 +159,20 @@ def main() -> None:
     ensure_repo_importable(repo_root)
 
     tf.compat.v1.disable_eager_execution()
-    tf.compat.v1.reset_default_graph()
 
     model_module = importlib.import_module("model")
+    ModelConfig = getattr(model_module, "ModelConfig")
     UNet = getattr(model_module, "UNet")
 
-    model = UNet(mode="pred")
+    config = ModelConfig(
+        depths=4,
+        filters_root=6,
+        kernel_size=[3, 3],
+        pool_size=[2, 2],
+        dilation_rate=[1, 1],
+        drop_rate=0,
+    )
+    model = UNet(config=config, mode="pred")
 
     sess_config = tf.compat.v1.ConfigProto()
     sess_config.gpu_options.allow_growth = True
@@ -175,7 +185,19 @@ def main() -> None:
         if latest_ckpt is None:
             raise FileNotFoundError(f"No checkpoint found under {checkpoint_dir}")
         print(f"[INFO] Restoring checkpoint: {latest_ckpt}")
-        saver.restore(sess, latest_ckpt)
+        checkpoint_var_names = [name for name, _ in tf.train.list_variables(latest_ckpt)]
+        graph_var_names = [var.op.name for var in tf.compat.v1.global_variables()]
+        try:
+            saver.restore(sess, latest_ckpt)
+        except Exception:
+            print(f"[DEBUG] Checkpoint path: {latest_ckpt}")
+            print("[DEBUG] First 30 checkpoint variable names:")
+            for name in checkpoint_var_names[:30]:
+                print(f"  {name}")
+            print("[DEBUG] First 30 graph global variable names:")
+            for name in graph_var_names[:30]:
+                print(f"  {name}")
+            raise
 
         output_tensor = model.preds if args.output_nodes == "preds" else model.logits
 

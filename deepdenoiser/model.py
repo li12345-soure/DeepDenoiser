@@ -92,6 +92,7 @@ class UNet:
         self.batch_size = config.batch_size
         self.loss_type = config.loss_type
         self.weight_decay = config.weight_decay
+        self.weight_decay_value = float(config.weight_decay)
         self.optimizer = config.optimizer
         self.decay_step = config.decay_step
         self.decay_rate = config.decay_rate
@@ -151,8 +152,7 @@ class UNet:
         )
 
         if self.weight_decay > 0:
-            weight_decay = tf.constant(self.weight_decay, dtype=tf.float32, name="weight_constant")
-            self.regularizer = tf.keras.regularizers.l2(l=0.5 * (weight_decay))
+            self.regularizer = tf.keras.regularizers.l2(0.5 * self.weight_decay_value)
         else:
             self.regularizer = None
 

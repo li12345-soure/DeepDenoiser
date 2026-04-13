@@ -3,7 +3,7 @@ import os
 import sys
 from pathlib import Path
 
-os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
 
 import numpy as np
 import tensorflow as tf
@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "deepdenoiser"))
 
-from model import UNet
+from model import ModelConfig, UNet
 from run_tflite_on_npz_fixed import (
     load_npz_waveform,
     prepare_waveform,
@@ -38,17 +38,37 @@ def run_tf_logits(checkpoint_dir: Path, X_input: np.ndarray) -> np.ndarray:
     tf.compat.v1.disable_eager_execution()
     tf.compat.v1.reset_default_graph()
 
-    model = UNet(mode="pred")
+    config = ModelConfig(
+        depths=4,
+        filters_root=6,
+        kernel_size=[3, 3],
+        pool_size=[2, 2],
+        dilation_rate=[1, 1],
+        drop_rate=0,
+    )
+    model = UNet(config=config, mode="pred")
     latest_ckpt = tf.train.latest_checkpoint(str(checkpoint_dir))
     if latest_ckpt is None:
         raise FileNotFoundError(f"No checkpoint found under {checkpoint_dir.resolve()}")
 
+    checkpoint_var_names = [name for name, _ in tf.train.list_variables(latest_ckpt)]
+    graph_var_names = [var.op.name for var in tf.compat.v1.global_variables()]
     saver = tf.compat.v1.train.Saver(tf.compat.v1.global_variables())
 
     logits_list = []
     with tf.compat.v1.Session() as sess:
         sess.run(tf.compat.v1.global_variables_initializer())
-        saver.restore(sess, latest_ckpt)
+        try:
+            saver.restore(sess, latest_ckpt)
+        except Exception:
+            print(f"[DEBUG] Checkpoint path: {latest_ckpt}")
+            print("[DEBUG] First 30 checkpoint variable names:")
+            for name in checkpoint_var_names[:30]:
+                print(f"  {name}")
+            print("[DEBUG] First 30 graph global variable names:")
+            for name in graph_var_names[:30]:
+                print(f"  {name}")
+            raise
 
         for i in range(X_input.shape[0]):
             x_i = X_input[i:i + 1].astype(np.float32)

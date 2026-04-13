@@ -1,0 +1,452 @@
+A_d4_r6
+================================
+candidate: A_d4_r6
+purpose: first small-model PTQ candidate
+status: training completed; TF raw debug export completed; float logits builtin-only export completed; TF vs float comparison completed; int8 logits builtin-only export completed; TF vs int8 comparison completed
+
+structure
+---------
+depth = 4
+filters_root = 6
+kernel_size = [3, 3]
+pool_size = [2, 2]
+dilation_rate = [1, 1]
+drop_rate = 0
+loss_type = cross_entropy
+
+optimizer
+---------
+optimizer = adam
+learning_rate = 3e-4
+weight_decay = 1e-5
+epochs = 40
+batch_size = 20
+
+fixed evaluation sample
+-----------------------
+Dataset/pred/BK_BKS_2008110908041793.npz
+
+attempt 1 (failed: missing valid.csv)
+-------------------------------------
+./deepdenoiser_tflite_env/Scripts/python.exe ./deepdenoiser/train.py \
+  --mode=train \
+  --train_signal_dir=./Dataset/train \
+  --train_signal_list=./Dataset/train.csv \
+  --train_noise_dir=./Dataset/train \
+  --train_noise_list=./Dataset/train.csv \
+  --valid_signal_dir=./Dataset/valid \
+  --valid_signal_list=./Dataset/valid.csv \
+  --valid_noise_dir=./Dataset/valid \
+  --valid_noise_list=./Dataset/valid.csv \
+  --batch_size=20 \
+  --epochs=40 \
+  --learning_rate=3e-4 \
+  --optimizer=adam \
+  --weight_decay=1e-5 \
+  --filters_root=6 \
+  --depth=4 \
+  --kernel_size 3 3 \
+  --pool_size 2 2 \
+  --dilation_rate 1 1 \
+  --drop_rate=0 \
+  --loss_type=cross_entropy \
+  --log_dir=./runs/A_d4_r6
+
+failure reason:
+- ./Dataset/valid.csv not found
+
+attempt 2 (failed: tf.keras.regularizers.l2 old arg name)
+---------------------------------------------------------
+./deepdenoiser_tflite_env/Scripts/python.exe ./deepdenoiser/train.py \
+  --mode=train \
+  --train_signal_dir=./Dataset/train \
+  --train_signal_list=./Dataset/train.csv \
+  --train_noise_dir=./Dataset/train \
+  --train_noise_list=./Dataset/train.csv \
+  --batch_size=20 \
+  --epochs=40 \
+  --learning_rate=3e-4 \
+  --optimizer=adam \
+  --weight_decay=1e-5 \
+  --filters_root=6 \
+  --depth=4 \
+  --kernel_size 3 3 \
+  --pool_size 2 2 \
+  --dilation_rate 1 1 \
+  --drop_rate=0 \
+  --loss_type=cross_entropy \
+  --log_dir=./runs/A_d4_r6
+
+failure reason:
+- tf.keras.regularizers.l2(l=...) incompatible with current tf.keras
+
+attempt 3 (failed: l2 received Tensor instead of Python float)
+--------------------------------------------------------------
+./deepdenoiser_tflite_env/Scripts/python.exe ./deepdenoiser/train.py \
+  --mode=train \
+  --train_signal_dir=./Dataset/train \
+  --train_signal_list=./Dataset/train.csv \
+  --train_noise_dir=./Dataset/train \
+  --train_noise_list=./Dataset/train.csv \
+  --batch_size=20 \
+  --epochs=40 \
+  --learning_rate=3e-4 \
+  --optimizer=adam \
+  --weight_decay=1e-5 \
+  --filters_root=6 \
+  --depth=4 \
+  --kernel_size 3 3 \
+  --pool_size 2 2 \
+  --dilation_rate 1 1 \
+  --drop_rate=0 \
+  --loss_type=cross_entropy \
+  --log_dir=./runs/A_d4_r6
+
+failure reason:
+- tf.keras.regularizers.l2(...) received Tensor, but current keras expects Python float
+
+code fix 1
+----------
+model.py compatibility fixes:
+1. tf.keras.regularizers.l2(l=...) -> tf.keras.regularizers.l2(...)
+2. added self.weight_decay_value = float(config.weight_decay)
+3. regularizer now uses Python float:
+   self.regularizer = tf.keras.regularizers.l2(0.5 * self.weight_decay_value)
+
+attempt 4 (failed: Keras 3 / compat.v1.layers issue)
+----------------------------------------------------
+same training command as above
+
+failure reason:
+- tf.compat.v1.layers.conv2d is not available with Keras 3
+
+code fix 2
+----------
+train.py compatibility fixes:
+1. set TF_USE_LEGACY_KERAS=1 before importing tensorflow
+2. use legacy tf_keras path in current environment
+
+attempt 5 (failed: FileWriter path issue)
+-----------------------------------------
+same training command as above
+
+failure reason:
+- FileWriter reported:
+  .\runs\A_d4_r6\260410-193858 is not a directory
+
+code fix 3
+----------
+train.py path normalization fixes:
+1. log_dir = os.path.abspath(os.path.normpath(os.path.join(args.log_dir, current_time)))
+2. log_dir = log_dir.replace("\\", "/")
+
+attempt 6 (failed: FileWriter path issue with non-ASCII path)
+-------------------------------------------------------------
+same training command as above
+
+failure reason:
+- FileWriter still reported:
+  G:/桌面/边缘部署/DeepDenoiser/runs/A_d4_r6/260410-194932 is not a directory
+
+attempt 7 (successful training run)
+-----------------------------------
+.\deepdenoiser_tflite_env\Scripts\python.exe .\deepdenoiser\train.py `
+  --mode=train `
+  --train_signal_dir=.\Dataset\train `
+  --train_signal_list=.\Dataset\train.csv `
+  --train_noise_dir=.\Dataset\train `
+  --train_noise_list=.\Dataset\train.csv `
+  --batch_size=20 `
+  --epochs=40 `
+  --learning_rate=3e-4 `
+  --optimizer=adam `
+  --weight_decay=1e-5 `
+  --filters_root=6 `
+  --depth=4 `
+  --kernel_size 3 3 `
+  --pool_size 2 2 `
+  --dilation_rate 1 1 `
+  --drop_rate=0 `
+  --loss_type=cross_entropy `
+  --log_dir=G:\dd_runs\A_d4_r6
+
+successful run info
+-------------------
+log_dir used:
+G:\dd_runs\A_d4_r6
+
+actual training log dir:
+G:/dd_runs/A_d4_r6/260410-195448
+
+result:
+- training loop entered successfully
+- completed through epoch 39
+- mean loss at epoch 39: 0.489309
+
+note:
+- process exit produced TF1 queue/thread shutdown errors after training finished
+- this is treated as shutdown noise unless checkpoint inspection shows otherwise
+
+checkpoint confirmed
+--------------------
+checkpoint dir:
+G:/dd_runs/A_d4_r6/260410-195448
+
+latest checkpoint:
+model_39.ckpt
+
+TF raw debug export attempt 1
+-----------------------------
+.\deepdenoiser_tflite_env\Scripts\python.exe .\export_tf_raw_debug_fixed.py `
+  --checkpoint_dir G:\dd_runs\A_d4_r6\260410-195448 `
+  --npz .\Dataset\pred\BK_BKS_2008110908041793.npz `
+  --save_npz .\experiments\small_model_ptq\A_d4_r6\tf_raw_debug.npz
+
+result:
+failed
+
+failure reason:
+Key DownConv_3/down_bn3_4/beta not found in checkpoint
+
+current judgement:
+export script graph does not match checkpoint variable names
+
+export script fix
+-----------------
+export_tf_raw_debug_fixed.py compatibility / alignment fixes:
+1. set TF_USE_LEGACY_KERAS=1 before importing tensorflow
+2. add tf.compat.v1.reset_default_graph() before graph build
+3. explicitly use A_d4_r6 config:
+   - depth = 4
+   - filters_root = 6
+   - kernel_size = [3, 3]
+   - pool_size = [2, 2]
+   - dilation_rate = [1, 1]
+   - drop_rate = 0
+4. ensure only one UNet instance is built
+5. add restore failure variable-name debug printing
+
+TF raw debug export attempt 2
+-----------------------------
+.\deepdenoiser_tflite_env\Scripts\python.exe .\export_tf_raw_debug_fixed.py `
+  --checkpoint_dir G:\dd_runs\A_d4_r6\260410-195448 `
+  --npz .\Dataset\pred\BK_BKS_2008110908041793.npz `
+  --save_npz .\experiments\small_model_ptq\A_d4_r6\tf_raw_debug.npz
+
+result:
+success
+
+details:
+- restored checkpoint successfully
+- model input feature shape: (3, 31, 201, 2)
+- TF preds shape: (3, 31, 201, 2)
+- saved:
+  experiments/small_model_ptq/A_d4_r6/tf_raw_debug.npz
+
+float logits builtin-only export attempt 1
+------------------------------------------
+.\deepdenoiser_tflite_env\Scripts\python.exe .\convert_deepdenoiser_tflite.py `
+  --repo_root G:\桌面\边缘部署\DeepDenoiser `
+  --checkpoint_dir G:\dd_runs\A_d4_r6\260410-195448 `
+  --output_tflite .\experiments\small_model_ptq\A_d4_r6\model_float_logits_builtin.tflite `
+  --output_nodes logits `
+  --quant_mode none
+
+result:
+failed
+
+failure reason:
+Key DownConv_3/down_bn3_4/beta not found in checkpoint
+
+current judgement:
+convert script graph does not match checkpoint variable names
+
+convert script fix
+------------------
+convert_deepdenoiser_tflite.py compatibility / alignment fixes:
+1. set TF_USE_LEGACY_KERAS=1 before importing tensorflow
+2. add tf.compat.v1.reset_default_graph() before graph build
+3. explicitly use A_d4_r6 config:
+   - depth = 4
+   - filters_root = 6
+   - kernel_size = [3, 3]
+   - pool_size = [2, 2]
+   - dilation_rate = [1, 1]
+   - drop_rate = 0
+4. ensure only one UNet instance is built
+5. add restore failure variable-name debug printing
+
+float logits builtin-only export attempt 2
+------------------------------------------
+.\deepdenoiser_tflite_env\Scripts\python.exe .\convert_deepdenoiser_tflite.py `
+  --repo_root G:\桌面\边缘部署\DeepDenoiser `
+  --checkpoint_dir G:\dd_runs\A_d4_r6\260410-195448 `
+  --output_tflite .\experiments\small_model_ptq\A_d4_r6\model_float_logits_builtin.tflite `
+  --output_nodes logits `
+  --quant_mode none
+
+result:
+success
+
+details:
+- wrote model_float_logits_builtin.tflite
+- size: 196.52 KB
+- input shape: [1, 31, 201, 2]
+- output shape: [1, 31, 201, 2]
+
+TF vs float logits compare attempt 1
+-----------------------------------
+.\deepdenoiser_tflite_env\Scripts\python.exe .\compare_tf_vs_float_logits.py `
+  --checkpoint_dir G:\dd_runs\A_d4_r6\260410-195448 `
+  --float_model .\experiments\small_model_ptq\A_d4_r6\model_float_logits_builtin.tflite `
+  --npz .\Dataset\pred\BK_BKS_2008110908041793.npz `
+  --save_npz .\experiments\small_model_ptq\A_d4_r6\compare_tf_vs_float_logits.npz
+
+result:
+failed
+
+failure reason:
+Key DownConv_3/down_bn3_4/beta not found in checkpoint
+
+current judgement:
+compare script graph does not match checkpoint variable names
+
+TF vs float logits compare script fix
+------------------------------------
+compare_tf_vs_float_logits.py compatibility / alignment fixes:
+1. set TF_USE_LEGACY_KERAS=1 before importing tensorflow
+2. add tf.compat.v1.reset_default_graph() before graph build
+3. explicitly use A_d4_r6 config:
+   - depth = 4
+   - filters_root = 6
+   - kernel_size = [3, 3]
+   - pool_size = [2, 2]
+   - dilation_rate = [1, 1]
+   - drop_rate = 0
+4. ensure only one UNet instance is built
+5. add restore failure variable-name debug printing
+
+TF vs float logits compare attempt 2
+-----------------------------------
+.\deepdenoiser_tflite_env\Scripts\python.exe .\compare_tf_vs_float_logits.py `
+  --checkpoint_dir G:\dd_runs\A_d4_r6\260410-195448 `
+  --float_model .\experiments\small_model_ptq\A_d4_r6\model_float_logits_builtin.tflite `
+  --npz .\Dataset\pred\BK_BKS_2008110908041793.npz `
+  --save_npz .\experiments\small_model_ptq\A_d4_r6\compare_tf_vs_float_logits.npz
+
+result:
+success
+
+details:
+- TF logits shape: (3, 31, 201, 2)
+- float logits shape: (3, 31, 201, 2)
+
+logits metrics:
+- mae = 1.837740057908377e-07
+- rmse = 2.91895105419826e-07
+- max_abs = 4.291534423828125e-06
+- argmax_acc = 1.0
+
+softmax(logits) metrics:
+- mae = 4.7700574157261144e-08
+- rmse = 7.343206220866705e-08
+- max_abs = 5.960464477539062e-07
+- argmax_acc = 1.0
+
+saved:
+experiments/small_model_ptq/A_d4_r6/compare_tf_vs_float_logits.npz
+
+int8 logits builtin-only export attempt 1
+-----------------------------------------
+.\deepdenoiser_tflite_env\Scripts\python.exe .\convert_deepdenoiser_tflite.py `
+  --repo_root G:\桌面\边缘部署\DeepDenoiser `
+  --checkpoint_dir G:\dd_runs\A_d4_r6\260410-195448 `
+  --output_tflite .\experiments\small_model_ptq\A_d4_r6\model_int8_logits_builtin.tflite `
+  --output_nodes logits `
+  --quant_mode int8 `
+  --calib_dir G:\桌面\边缘部署\DeepDenoiser\calib_features_full `
+  --max_calib_samples 297 `
+  --int8_io
+
+result:
+success
+
+details:
+- wrote model_int8_logits_builtin.tflite
+- size: 62.34 KB
+- input dtype: int8
+- output dtype: int8
+
+TF vs int8 logits compare attempt 1
+-----------------------------------
+.\deepdenoiser_tflite_env\Scripts\python.exe .\compare_tf_vs_int8_logits.py `
+  --checkpoint_dir G:\dd_runs\A_d4_r6\260410-195448 `
+  --int8_model .\experiments\small_model_ptq\A_d4_r6\model_int8_logits_builtin.tflite `
+  --npz .\Dataset\pred\BK_BKS_2008110908041793.npz `
+  --save_npz .\experiments\small_model_ptq\A_d4_r6\compare_tf_vs_int8_logits.npz
+
+result:
+failed
+
+failure reason:
+Key DownConv_3/down_bn3_4/beta not found in checkpoint
+
+current judgement:
+compare script graph does not match checkpoint variable names
+
+TF vs int8 logits compare script fix
+-----------------------------------
+compare_tf_vs_int8_logits.py compatibility / alignment fixes:
+1. set TF_USE_LEGACY_KERAS=1 before importing tensorflow
+2. add tf.compat.v1.reset_default_graph() before graph build
+3. explicitly use A_d4_r6 config:
+   - depth = 4
+   - filters_root = 6
+   - kernel_size = [3, 3]
+   - pool_size = [2, 2]
+   - dilation_rate = [1, 1]
+   - drop_rate = 0
+4. ensure only one UNet instance is built
+5. add restore failure variable-name debug printing
+
+TF vs int8 logits compare attempt 2
+-----------------------------------
+.\deepdenoiser_tflite_env\Scripts\python.exe .\compare_tf_vs_int8_logits.py `
+  --checkpoint_dir G:\dd_runs\A_d4_r6\260410-195448 `
+  --int8_model .\experiments\small_model_ptq\A_d4_r6\model_int8_logits_builtin.tflite `
+  --npz .\Dataset\pred\BK_BKS_2008110908041793.npz `
+  --save_npz .\experiments\small_model_ptq\A_d4_r6\compare_tf_vs_int8_logits.npz
+
+result:
+success
+
+details:
+- TF logits shape: (3, 31, 201, 2)
+- int8 logits shape: (3, 31, 201, 2)
+
+logits metrics:
+- mae = 0.04474635049700737
+- rmse = 0.057864174246788025
+- max_abs = 0.3337172269821167
+- argmax_acc = 0.9959878029208795
+
+softmax(logits) metrics:
+- mae = 0.012948709540069103
+- rmse = 0.016230395063757896
+- max_abs = 0.0805220901966095
+- argmax_acc = 0.9959878029208795
+
+quant:
+- input_scale = 0.2968551814556122
+- input_zero_point = 15
+- output_scale = 0.08275671303272247
+- output_zero_point = 70
+
+saved:
+experiments/small_model_ptq/A_d4_r6/compare_tf_vs_int8_logits.npz
+
+next action
+-----------
+1. use A_d4_r6 as current small-model PTQ baseline
+2. run B_d4_r4 with the same pipeline
+3. run C_d5_r6_cap48 with the same pipeline
