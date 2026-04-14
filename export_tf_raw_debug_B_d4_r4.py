@@ -82,7 +82,7 @@ def main():
 
     config = ModelConfig(
         depths=4,
-        filters_root=6,
+        filters_root=4,
         kernel_size=[3, 3],
         pool_size=[2, 2],
         dilation_rate=[1, 1],

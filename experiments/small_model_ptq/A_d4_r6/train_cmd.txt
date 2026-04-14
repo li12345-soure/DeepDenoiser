@@ -2,7 +2,7 @@ A_d4_r6
 ================================
 candidate: A_d4_r6
 purpose: first small-model PTQ candidate
-status: training completed; TF raw debug export completed; float logits builtin-only export completed; TF vs float comparison completed; int8 logits builtin-only export completed; TF vs int8 comparison completed
+status: training completed; TF raw debug export completed; float logits builtin-only export completed; TF vs float comparison completed; int8 logits builtin-only export completed; TF vs int8 comparison completed; original_float vs A_d4_r6_float waveform comparison completed
 
 structure
 ---------
@@ -445,8 +445,94 @@ quant:
 saved:
 experiments/small_model_ptq/A_d4_r6/compare_tf_vs_int8_logits.npz
 
+evaluation set setup
+--------------------
+created:
+experiments/small_model_ptq/eval_set_30.txt
+
+selection rule:
+- random 30 samples from Dataset/pred
+- exclude fixed debug sample BK_BKS_2008110908041793.npz
+
+original float export script
+----------------------------
+created:
+export_tf_raw_debug_original.py
+
+goal:
+- export original model float outputs in the same npz format used by A_d4_r6 batch evaluation
+- keep TF_USE_LEGACY_KERAS=1, reset_default_graph, restore compatibility fixes
+- use original model config instead of A_d4_r6 hard-coded config
+
+verified:
+- py_compile passed
+- smoke test passed with checkpoint:
+  .\model\190614-104802
+
+original float batch export
+---------------------------
+New-Item -ItemType Directory -Force -Path .\experiments\small_model_ptq\eval_outputs\original_float | Out-Null
+
+$files = Get-Content .\experiments\small_model_ptq\eval_set_30.txt
+foreach ($npz in $files) {
+  $name = [System.IO.Path]::GetFileNameWithoutExtension($npz)
+  .\deepdenoiser_tflite_env\Scripts\python.exe .\export_tf_raw_debug_original.py `
+    --checkpoint_dir .\model\190614-104802 `
+    --npz $npz `
+    --save_npz ".\experiments\small_model_ptq\eval_outputs\original_float\$name.npz"
+}
+
+A_d4_r6 float batch export
+--------------------------
+New-Item -ItemType Directory -Force -Path .\experiments\small_model_ptq\eval_outputs\A_d4_r6_float | Out-Null
+
+$files = Get-Content .\experiments\small_model_ptq\eval_set_30.txt
+foreach ($npz in $files) {
+  $name = [System.IO.Path]::GetFileNameWithoutExtension($npz)
+  .\deepdenoiser_tflite_env\Scripts\python.exe .\export_tf_raw_debug_fixed.py `
+    --checkpoint_dir G:\dd_runs\A_d4_r6\260410-195448 `
+    --npz $npz `
+    --save_npz ".\experiments\small_model_ptq\eval_outputs\A_d4_r6_float\$name.npz"
+}
+
+waveform comparison
+-------------------
+.\deepdenoiser_tflite_env\Scripts\python.exe .\batch_compare_waveforms.py `
+  --ref_dir .\experiments\small_model_ptq\eval_outputs\original_float `
+  --cand_dir .\experiments\small_model_ptq\eval_outputs\A_d4_r6_float `
+  --ref_name original_float `
+  --cand_name A_d4_r6_float `
+  --out_csv .\experiments\small_model_ptq\eval_outputs\orig_vs_A_d4_r6_float_summary.csv `
+  --out_md .\experiments\small_model_ptq\eval_outputs\orig_vs_A_d4_r6_float_summary.md
+
+waveform comparison result
+--------------------------
+compared samples:
+- 30
+
+mean metrics:
+- cand_vs_ref_wave_mae = 171.15541896
+- cand_vs_ref_wave_rmse = 221.74718778
+- cand_vs_ref_cosine = 0.68485672
+- cand_vs_ref_peak_norm_rmse = 0.14250056
+
+worst 5 samples by wave rmse:
+- BK_PACP_2008010512113190: rmse=1200.17944336 cosine=0.77924641 peak_norm_rmse=0.08649056
+- BK_WENL_2015010711035475: rmse=691.74536133 cosine=0.56921617 peak_norm_rmse=0.09778191
+- BK_ORV_2010121817463027: rmse=621.18725586 cosine=0.92283995 peak_norm_rmse=0.08085753
+- BK_SCZ_2015110300244148: rmse=501.63623047 cosine=0.47034936 peak_norm_rmse=0.34527680
+- BK_SCZ_2014050200233687: rmse=489.04089355 cosine=0.87014723 peak_norm_rmse=0.05009943
+
+judgement:
+- A_d4_r6 is not a near-copy of the original float model at waveform level
+- A_d4_r6 remains a strong quant-friendly small-model baseline
+- A_d4_r6 should not yet be treated as the final replacement for the original model
+
 next action
 -----------
-1. use A_d4_r6 as current small-model PTQ baseline
+1. keep A_d4_r6 as current quant-friendly small-model baseline
 2. run B_d4_r4 with the same pipeline
 3. run C_d5_r6_cap48 with the same pipeline
+4. compare B/C against both:
+   - original_float waveform similarity
+   - PTQ stability

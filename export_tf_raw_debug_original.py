@@ -23,7 +23,7 @@ from run_tflite_on_npz_fixed import (
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Export original TF checkpoint raw model_input/preds for one NPZ"
+        description="Export original-model TF checkpoint raw outputs for one NPZ"
     )
     parser.add_argument(
         "--checkpoint_dir",
@@ -37,7 +37,7 @@ def main():
     )
     parser.add_argument(
         "--save_npz",
-        default="orig_raw_debug.npz",
+        default="orig_raw_debug_original.npz",
         help="Output npz path",
     )
     parser.add_argument(
@@ -80,14 +80,7 @@ def main():
     X_input, noisy_signal, nbt, nt, nch = waveform_to_model_input(batch_waveform)
     print(f"[INFO] Model input feature shape: {X_input.shape} [batch*chn, 31, 201, 2]")
 
-    config = ModelConfig(
-        depths=4,
-        filters_root=6,
-        kernel_size=[3, 3],
-        pool_size=[2, 2],
-        dilation_rate=[1, 1],
-        drop_rate=0,
-    )
+    config = ModelConfig()
     model = UNet(config=config, mode="pred")
 
     latest_ckpt = tf.train.latest_checkpoint(str(checkpoint_dir))
@@ -95,8 +88,6 @@ def main():
         raise FileNotFoundError(f"No checkpoint found under {checkpoint_dir.resolve()}")
     print(f"[INFO] Restoring checkpoint: {latest_ckpt}")
 
-    checkpoint_var_names = [name for name, _ in tf.train.list_variables(latest_ckpt)]
-    graph_var_names = [var.op.name for var in tf.compat.v1.global_variables()]
     saver = tf.compat.v1.train.Saver(tf.compat.v1.global_variables())
 
     preds_list = []
@@ -106,9 +97,14 @@ def main():
             saver.restore(sess, latest_ckpt)
         except Exception:
             print(f"[DEBUG] Checkpoint path: {latest_ckpt}")
-            print("[DEBUG] First 30 checkpoint variable names:")
-            for name in checkpoint_var_names[:30]:
-                print(f"  {name}")
+            try:
+                checkpoint_var_names = [name for name, _ in tf.train.list_variables(latest_ckpt)]
+                print("[DEBUG] First 30 checkpoint variable names:")
+                for name in checkpoint_var_names[:30]:
+                    print(f"  {name}")
+            except Exception as list_err:
+                print(f"[DEBUG] Failed to list checkpoint variables: {list_err}")
+            graph_var_names = [var.op.name for var in tf.compat.v1.global_variables()]
             print("[DEBUG] First 30 graph global variable names:")
             for name in graph_var_names[:30]:
                 print(f"  {name}")

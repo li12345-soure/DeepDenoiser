@@ -81,8 +81,9 @@ def main():
     print(f"[INFO] Model input feature shape: {X_input.shape} [batch*chn, 31, 201, 2]")
 
     config = ModelConfig(
-        depths=4,
+        depths=5,
         filters_root=6,
+        filters_cap=48,
         kernel_size=[3, 3],
         pool_size=[2, 2],
         dilation_rate=[1, 1],

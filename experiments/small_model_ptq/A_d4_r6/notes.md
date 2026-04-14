@@ -21,6 +21,7 @@ A_d4_r6 已成功完成一轮正式训练，并已完成以下关键步骤：
 3. TF vs float logits 对比成功
 4. int8 logits builtin-only TFLite 导出成功
 5. TF vs int8 logits 对比成功
+6. original_float vs A_d4_r6_float 的 30 样本 waveform 对比完成
 
 当前阶段：
 - 训练主流程已跑通
@@ -29,6 +30,7 @@ A_d4_r6 已成功完成一轮正式训练，并已完成以下关键步骤：
 - float logits builtin-only 模型已验证对齐
 - int8 logits builtin-only 模型已验证可用
 - A_d4_r6 已可作为当前“小模型 PTQ 基线”
+- 但 A_d4_r6 还不能视为原始模型的近似复制品
 
 ---
 
@@ -210,7 +212,7 @@ A_d4_r6 已成功完成一轮正式训练，并已完成以下关键步骤：
 
 处理：
 - 使用真实代表性特征目录：
-  `G:\桌面\边缘部署\DeepDenoiser\calib_features_full`
+  `G:\桌面/边缘部署/DeepDenoiser\calib_features_full`
 - 固定 `max_calib_samples = 297`
 
 重试结果：
@@ -253,6 +255,57 @@ A_d4_r6 已成功完成一轮正式训练，并已完成以下关键步骤：
 
 ---
 
+### Attempt 13
+为了比较“原始模型 float vs A_d4_r6 float”的最终行为，新增原始模型导出脚本并进行批量导出。
+
+处理：
+- 新增 `export_tf_raw_debug_original.py`
+- 保留 legacy keras、reset_default_graph、restore 调试逻辑
+- 去掉 A_d4_r6 的显式硬编码配置，改为使用原始模型配置
+- 输出格式与 A_d4_r6 导出脚本对齐，确保保存：
+  - `input_waveform`
+  - `denoised_waveform`
+  - `model_input`
+  - `preds`
+  - `dt`
+
+结果：
+- 原始模型 checkpoint `./model/190614-104802` smoke test 已通过
+- 可用于批量导出 `original_float` 的评估输出
+
+---
+
+### Attempt 14
+进行 original_float vs A_d4_r6_float 的 30 样本批量 waveform 对比。
+
+评估集：
+- `experiments/small_model_ptq/eval_set_30.txt`
+
+输出目录：
+- `experiments/small_model_ptq/eval_outputs/original_float`
+- `experiments/small_model_ptq/eval_outputs/A_d4_r6_float`
+
+汇总结果：
+- compared samples = `30`
+- mean cand_vs_ref_wave_mae = `171.15541896`
+- mean cand_vs_ref_wave_rmse = `221.74718778`
+- mean cand_vs_ref_cosine = `0.68485672`
+- mean cand_vs_ref_peak_norm_rmse = `0.14250056`
+
+最差 5 个样本：
+- `BK_PACP_2008010512113190`
+- `BK_WENL_2015010711035475`
+- `BK_ORV_2010121817463027`
+- `BK_SCZ_2015110300244148`
+- `BK_SCZ_2014050200233687`
+
+结论：
+- A_d4_r6 和 original_float 的最终输出存在明显差异
+- 这不是“几乎复现原始模型”的水平
+- A_d4_r6 更适合被视为“量化友好的小模型基线”，而不是原始模型的直接替代品
+
+---
+
 ## Confirmed Facts So Far
 
 - 数据集读取成功
@@ -267,6 +320,8 @@ A_d4_r6 已成功完成一轮正式训练，并已完成以下关键步骤：
 - `compare_tf_vs_float_logits.npz` 已成功生成
 - `model_int8_logits_builtin.tflite` 已成功生成
 - `compare_tf_vs_int8_logits.npz` 已成功生成
+- `orig_vs_A_d4_r6_float_summary.csv` 已成功生成
+- `orig_vs_A_d4_r6_float_summary.md` 已成功生成
 
 ---
 
@@ -280,16 +335,18 @@ A_d4_r6 已成功完成一轮正式训练，并已完成以下关键步骤：
 4. TF logits vs float logits 已验证为高精度对齐
 5. int8 logits builtin-only 模型已成功生成
 6. TF logits vs int8 logits 在固定样本上保持了很高一致性
-7. 当前还没有完成 waveform / end-to-end 多样本验证
-8. 当前还没有完成与 STM32 / X-CUBE-AI 的整链路部署验证
+7. 30 样本 waveform 对比表明，A_d4_r6 与 original_float 存在明显能力差异
+8. 当前还没有完成 clean/reference 绝对任务评估
+9. 当前还没有完成与 STM32 / X-CUBE-AI 的整链路部署验证
 
 所以现在的阶段判断是：
 
 - A_d4_r6 已通过 float 验证
 - A_d4_r6 已通过固定样本上的 int8 logits 验证
-- A_d4_r6 可作为当前最好的小模型 PTQ 候选
+- A_d4_r6 是当前最好的量化友好 small-model PTQ baseline
+- 但 A_d4_r6 还不能直接当作原始模型的最终替代品
 - 下一阶段重点是：
-  与 B_d4_r4 / C_d5_r6_cap48 横向对比，以及后续部署侧验证
+  与 B_d4_r4 / C_d5_r6_cap48 横向对比，以及后续 clean/reference 与部署侧验证
 
 ---
 
@@ -318,6 +375,14 @@ A_d4_r6 已成功完成一轮正式训练，并已完成以下关键步骤：
 - 显式使用 A_d4_r6 配置
 - 单次构图
 - 增加 restore 失败时的变量名调试输出
+- 批量评估路径下保持 `denoised_waveform` 导出一致
+
+### export_tf_raw_debug_original.py
+- 增加 legacy keras
+- 增加 `tf.compat.v1.reset_default_graph()`
+- 使用原始模型配置
+- 输出格式与 fixed 版对齐
+- 可用于 original_float 的批量 waveform 评估
 
 ### convert_deepdenoiser_tflite.py
 - 增加 legacy keras
@@ -360,13 +425,14 @@ A_d4_r6 已成功完成一轮正式训练，并已完成以下关键步骤：
 
 ## Next Step
 
-1. 把 A_d4_r6 固定为当前 small-model PTQ baseline
+1. 把 A_d4_r6 固定为当前 quant-friendly small-model baseline
 2. 用同一套流程继续跑 B_d4_r4
 3. 用同一套流程继续跑 C_d5_r6_cap48
 4. 统一比较：
+   - original_float vs candidate_float 的 waveform 相似度
    - float 模型大小
    - int8 模型大小
    - logits mae / rmse / max_abs
    - logits argmax_acc
    - softmax(logits) argmax_acc
-5. 选出最适合继续部署验证的一条线
+5. 再决定谁最适合继续做 clean/reference 评估和部署验证

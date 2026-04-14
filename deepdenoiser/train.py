@@ -63,6 +63,11 @@ def read_args():
                       type=int,
                       help="filters root (default: 8)")
 
+  parser.add_argument("--filters_cap",
+                      default=None,
+                      type=int,
+                      help="maximum filters per layer (default: None)")
+
   parser.add_argument("--depth",
                       default=6,
                       type=int,
@@ -198,6 +203,7 @@ def set_config(args, data_reader):
 
   config.depths = args.depth
   config.filters_root = args.filters_root
+  config.filters_cap = args.filters_cap
   config.kernel_size = args.kernel_size
   config.pool_size = args.pool_size
   config.dilation_rate = args.dilation_rate

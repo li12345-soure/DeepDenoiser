@@ -1,0 +1,184 @@
+A / B / C small-model PTQ summary
+====================================
+
+current decision
+----------------
+mainline candidate      : A_d4_r6
+backup tiny candidate   : B_d4_r4
+stop deep-dive for now  : C_d5_r6_cap48
+
+why
+---
+A_d4_r6 gives the best overall balance across:
+1. waveform similarity to original_float
+2. fixed-sample PTQ stability
+3. model size for MCU-oriented deployment
+
+candidate structures
+--------------------
+
+A_d4_r6
+- depth = 4
+- filters_root = 6
+- filters_cap = None
+- kernel_size = [3, 3]
+- pool_size = [2, 2]
+- dilation_rate = [1, 1]
+- drop_rate = 0
+
+B_d4_r4
+- depth = 4
+- filters_root = 4
+- filters_cap = None
+- kernel_size = [3, 3]
+- pool_size = [2, 2]
+- dilation_rate = [1, 1]
+- drop_rate = 0
+
+C_d5_r6_cap48
+- depth = 5
+- filters_root = 6
+- filters_cap = 48
+- kernel_size = [3, 3]
+- pool_size = [2, 2]
+- dilation_rate = [1, 1]
+- drop_rate = 0
+
+key results
+-----------
+
+A_d4_r6
+- float size = 196.52 KB
+- int8 size  = 62.34 KB
+- tf_vs_int8 logits argmax_acc = 0.9959878029208795
+- waveform mean rmse   = 221.74718778
+- waveform mean cosine = 0.68485672
+
+B_d4_r4
+- float size = 92.01 KB
+- int8 size  = 34.27 KB
+- tf_vs_int8 logits argmax_acc = 0.965977
+- waveform mean rmse   = 233.94565414
+- waveform mean cosine = 0.64983624
+
+C_d5_r6_cap48
+- float size = 604.04 KB
+- int8 size  = 170.95 KB
+- tf_vs_int8 logits argmax_acc = 0.990210239126946
+- waveform mean rmse   = 231.83237039
+- waveform mean cosine = 0.64899144
+
+result interpretation
+---------------------
+- A is best overall
+- B is smallest, but loses too much
+- C is stable, but too large and not better than A at waveform level
+
+next mainline
+-------------
+Do not continue more architecture search first.
+Move to distillation on top of A_d4_r6.
+
+teacher / student plan
+----------------------
+teacher = original large float model
+student = A_d4_r6
+
+target
+------
+Make A_d4_r6 closer to original_float while keeping its PTQ-friendly behavior.
+
+recommended next experiment
+---------------------------
+name:
+A_d4_r6_distill_v1
+
+student structure:
+- depth = 4
+- filters_root = 6
+
+loss idea:
+- total_loss = alpha * hard_label_ce + beta * distill_loss
+
+first suggested hyperparameters:
+- alpha = 0.5
+- beta = 0.5
+- temperature = 2 or 3
+
+evaluation after distillation
+-----------------------------
+Run the same pipeline again:
+
+1. TF raw debug export
+2. float logits builtin-only export
+3. TF vs float logits compare
+4. int8 logits builtin-only export
+5. TF vs int8 logits compare
+6. 30-sample waveform compare vs original_float
+
+existing commands kept for reference
+------------------------------------
+
+A_d4_r6 train
+.\deepdenoiser_tflite_env\Scripts\python.exe .\deepdenoiser\train.py `
+  --mode=train `
+  --train_signal_dir=.\Dataset\train `
+  --train_signal_list=.\Dataset\train.csv `
+  --train_noise_dir=.\Dataset\train `
+  --train_noise_list=.\Dataset\train.csv `
+  --batch_size=20 `
+  --epochs=40 `
+  --learning_rate=3e-4 `
+  --optimizer=adam `
+  --weight_decay=1e-5 `
+  --filters_root=6 `
+  --depth=4 `
+  --kernel_size 3 3 `
+  --pool_size 2 2 `
+  --dilation_rate 1 1 `
+  --drop_rate=0 `
+  --loss_type=cross_entropy `
+  --log_dir=G:\dd_runs\A_d4_r6
+
+B_d4_r4 train
+.\deepdenoiser_tflite_env\Scripts\python.exe .\deepdenoiser\train.py `
+  --mode=train `
+  --train_signal_dir=.\Dataset\train `
+  --train_signal_list=.\Dataset\train.csv `
+  --train_noise_dir=.\Dataset\train `
+  --train_noise_list=.\Dataset\train.csv `
+  --batch_size=20 `
+  --epochs=40 `
+  --learning_rate=3e-4 `
+  --optimizer=adam `
+  --weight_decay=1e-5 `
+  --filters_root=4 `
+  --depth=4 `
+  --kernel_size 3 3 `
+  --pool_size 2 2 `
+  --dilation_rate 1 1 `
+  --drop_rate=0 `
+  --loss_type=cross_entropy `
+  --log_dir=G:\dd_runs\B_d4_r4
+
+C_d5_r6_cap48 train
+.\deepdenoiser_tflite_env\Scripts\python.exe .\deepdenoiser\train.py `
+  --mode=train `
+  --train_signal_dir=.\Dataset\train `
+  --train_signal_list=.\Dataset\train.csv `
+  --train_noise_dir=.\Dataset\train `
+  --train_noise_list=.\Dataset\train.csv `
+  --batch_size=20 `
+  --epochs=40 `
+  --learning_rate=3e-4 `
+  --optimizer=adam `
+  --weight_decay=1e-5 `
+  --filters_root=6 `
+  --filters_cap=48 `
+  --depth=5 `
+  --kernel_size 3 3 `
+  --pool_size 2 2 `
+  --dilation_rate 1 1 `
+  --drop_rate=0 `
+  --loss_type=cross_entropy `
+  --log_dir=G:\dd_runs\C_d5_r6_cap48

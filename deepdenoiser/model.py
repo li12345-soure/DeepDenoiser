@@ -13,6 +13,7 @@ class ModelConfig:
     batch_size = 20
     depths = 6
     filters_root = 8
+    filters_cap = None
     kernel_size = [3, 3]
     pool_size = [2, 2]
     dilation_rate = [1, 1]
@@ -81,6 +82,7 @@ class UNet:
     def __init__(self, config=ModelConfig(), input_batch=None, mode='train'):
         self.depths = config.depths
         self.filters_root = config.filters_root
+        self.filters_cap = getattr(config, "filters_cap", None)
         self.kernel_size = config.kernel_size
         self.dilation_rate = config.dilation_rate
         self.pool_size = config.pool_size
@@ -103,6 +105,12 @@ class UNet:
         self.summary_valid = []
 
         self.build(input_batch, mode=mode)
+
+    def get_filters(self, original_channels):
+        filters = int(original_channels)
+        if self.filters_cap is None:
+            return filters
+        return min(filters, int(self.filters_cap))
 
     def add_placeholders(self, input_batch=None, mode='train'):
         if input_batch is None:
@@ -167,7 +175,7 @@ class UNet:
             net = self.X
             net = tf.compat.v1.layers.conv2d(
                 net,
-                filters=self.filters_root,
+                filters=self.get_filters(self.filters_root),
                 kernel_size=self.kernel_size,
                 activation=None,
                 use_bias=False,
@@ -185,7 +193,7 @@ class UNet:
 
         for depth in range(0, self.depths):
             with tf.compat.v1.variable_scope("DownConv_%d" % depth):
-                filters = int(2 ** (depth) * self.filters_root)
+                filters = self.get_filters(2 ** depth * self.filters_root)
 
                 net = tf.compat.v1.layers.conv2d(
                     net,
@@ -236,7 +244,7 @@ class UNet:
         # up layers
         for depth in range(self.depths - 2, -1, -1):
             with tf.compat.v1.variable_scope("UpConv_%d" % depth):
-                filters = int(2 ** (depth) * self.filters_root)
+                filters = self.get_filters(2 ** depth * self.filters_root)
                 net = tf.compat.v1.layers.conv2d_transpose(
                     net,
                     filters=filters,

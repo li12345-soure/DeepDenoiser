@@ -138,8 +138,35 @@
 
 ## 7. Waveform / End-to-End Check
 
-- waveform_compare_plot: `not run`
-- waveform_comment: `not run`
+### Original Float vs A_d4_r6 Float Batch Waveform Compare
+- eval_set_file: `./experiments/small_model_ptq/eval_set_30.txt`
+- ref_model_name: `original_float`
+- cand_model_name: `A_d4_r6_float`
+- ref_checkpoint_dir: `./model/190614-104802`
+- cand_checkpoint_dir: `G:/dd_runs/A_d4_r6/260410-195448`
+- ref_output_dir: `./experiments/small_model_ptq/eval_outputs/original_float`
+- cand_output_dir: `./experiments/small_model_ptq/eval_outputs/A_d4_r6_float`
+- summary_csv: `./experiments/small_model_ptq/eval_outputs/orig_vs_A_d4_r6_float_summary.csv`
+- summary_md: `./experiments/small_model_ptq/eval_outputs/orig_vs_A_d4_r6_float_summary.md`
+- compared_samples: `30`
+
+### Batch Summary
+- mean_cand_vs_ref_wave_mae: `171.15541896`
+- mean_cand_vs_ref_wave_rmse: `221.74718778`
+- mean_cand_vs_ref_cosine: `0.68485672`
+- mean_cand_vs_ref_peak_norm_rmse: `0.14250056`
+
+### Worst 5 Samples by Wave RMSE
+- BK_PACP_2008010512113190: `rmse=1200.17944336`, `cosine=0.77924641`, `peak_norm_rmse=0.08649056`
+- BK_WENL_2015010711035475: `rmse=691.74536133`, `cosine=0.56921617`, `peak_norm_rmse=0.09778191`
+- BK_ORV_2010121817463027: `rmse=621.18725586`, `cosine=0.92283995`, `peak_norm_rmse=0.08085753`
+- BK_SCZ_2015110300244148: `rmse=501.63623047`, `cosine=0.47034936`, `peak_norm_rmse=0.34527680`
+- BK_SCZ_2014050200233687: `rmse=489.04089355`, `cosine=0.87014723`, `peak_norm_rmse=0.05009943`
+
+### Waveform Judgement
+- waveform_similarity_to_original: `moderate_but_not_close`
+- waveform_comment: `A_d4_r6 float is not a near-copy of the original float model; it shows noticeable behavior differences across the 30-sample set`
+- deployment_comment: `A_d4_r6 remains a strong PTQ baseline, but this waveform comparison suggests non-trivial model-capacity loss relative to the original model`
 
 ---
 
@@ -158,7 +185,7 @@
 - smaller_model: `yes`
 - better_int8_logits: `yes`
 - better_softmax_argmax_acc: `yes`
-- summary: `A_d4_r6 is far smaller and appears much more PTQ-friendly than the previous large-model baseline`
+- summary: `A_d4_r6 is far smaller and much more PTQ-friendly than the previous large-model baseline, but it is not a close waveform-level replica of the original float model`
 
 ---
 
@@ -228,13 +255,26 @@
 - fix_status: `fixed`
 - fix_detail: `updated compare_tf_vs_int8_logits.py with legacy keras, reset_default_graph, explicit A_d4_r6 config, single-graph build, and restore debug prints`
 
+### Failure 12
+- stage: `original-float batch export setup`
+- reason: `needed a script aligned to the original checkpoint rather than A_d4_r6 hard-coded config`
+- fix_status: `fixed`
+- fix_detail: `added export_tf_raw_debug_original.py using repo-default/original model config and matching output npz format`
+
+### Failure 13
+- stage: `batch waveform comparison`
+- reason: `initial A_d4_r6 batch outputs lacked final denoised waveform keys required by waveform comparison`
+- fix_status: `fixed`
+- fix_detail: `updated export_tf_raw_debug_fixed.py batch output path to save denoised_waveform consistently, enabling 30-sample waveform comparison`
+
 ---
 
 ## 10. Final Decision
 
-- decision: `current_best_small_model_ptq_candidate`
+- decision: `current_best_quant_friendly_small_model_baseline`
 - reason_1: `A_d4_r6 training completed successfully through epoch 39`
 - reason_2: `TF logits vs float logits are essentially identical`
 - reason_3: `A_d4_r6 int8 logits remain close to TF logits on the fixed sample`
 - reason_4: `A_d4_r6 int8 model size is only 62.34 KB`
-- next_action: `use A_d4_r6 as the PTQ small-model baseline, then continue B_d4_r4 and C_d5_r6_cap48 for horizontal comparison`
+- reason_5: `30-sample waveform comparison shows noticeable divergence from the original float model, so A_d4_r6 should be treated as a strong PTQ baseline rather than a final replacement`
+- next_action: `run B_d4_r4 and C_d5_r6_cap48 with the same pipeline, then compare waveform similarity to the original model and PTQ stability side by side`
