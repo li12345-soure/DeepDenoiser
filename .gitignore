@@ -1,79 +1,66 @@
-# =========================
-# Python
-# =========================
+# ===== Python =====
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.so
-*.egg-info/
+*.py[cod]
+*$py.class
+
+# ===== Virtual environments =====
+deepdenoiser_tflite_env/
 .venv/
 venv/
 env/
-.python-version
+ENV/
 
-# =========================
-# IDE / OS
-# =========================
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
+# ===== Packaging / build =====
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
 
-# =========================
-# Logs / temp
-# =========================
+# ===== Test / cache =====
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+
+# ===== Jupyter =====
+.ipynb_checkpoints/
+
+# ===== Logs =====
 *.log
 logs/
-tmp/
-temp/
+
+# ===== IDE / Editor =====
+.vscode/
+.idea/
+
+# ===== OS files =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== Temporary files =====
+*.tmp
+*.temp
+
+# ===== Common output folders =====
 runs/
-
-# =========================
-# Dataset and generated features
-# =========================
-Dataset/
-calib_features/
-calib_features_full/
-cubeai_validation/
-
-# =========================
-# Training checkpoints / exported models
-# =========================
-*.ckpt
-*.ckpt.*
-*.index
-*.data-*
-checkpoint
-saved_model/
-export/
-
-# =========================
-# TFLite / model artifacts
-# =========================
-*.tflite
-*.tflite.analysis.txt
-*.pb
-*.pbtxt
-
-# =========================
-# Generated debug / compare results
-# =========================
-*.npz
-*.npy
-*.png
-*.jpg
-*.jpeg
-result_*.*
-compare_*.*
-orig_raw_debug.npz
-tf_raw_debug*.npz
-int8_debug*.npz
-float_debug*.npz
-
-# =========================
-# Validation / analysis outputs
-# =========================
-reports/
-artifacts/
 outputs/
+results/
+tmp/
+
+# ===== Model / dataset files (按需开启) =====
+# *.pt
+# *.pth
+# *.ckpt
+# *.onnx
+# *.tflite
+# *.npz
+# *.npy
+# data/
+# datasets/
+# checkpoints/
