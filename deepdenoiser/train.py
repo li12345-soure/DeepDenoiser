@@ -11,17 +11,21 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 import argparse
 import time
 import logging
-from model import UNet
-from data_reader import *
-from util import *
+try:
+  from .model import UNet
+  from .data_reader import *
+  from .util import *
+except ImportError:
+  from model import UNet
+  from data_reader import *
+  from util import *
 from tqdm import tqdm
 import multiprocessing
 from functools import partial
 
 
-def read_args():
-  """Returns args"""
-
+def build_arg_parser():
+  """Builds the shared CLI parser."""
   parser = argparse.ArgumentParser()
 
   parser.add_argument("--mode",
@@ -128,6 +132,38 @@ def read_args():
                       default=None,
                       help="Checkpoint directory")
 
+  parser.add_argument("--student_init_ckpt",
+                      default=None,
+                      help="Exact student checkpoint path used to warm-start training")
+
+  parser.add_argument("--distill_enable",
+                      default=0,
+                      type=int,
+                      help="Enable distillation training (default: 0)")
+
+  parser.add_argument("--distill_teacher_cache_dir",
+                      default=None,
+                      help="Teacher logits cache directory for training data")
+
+  parser.add_argument("--distill_val_teacher_cache_dir",
+                      default=None,
+                      help="Teacher logits cache directory for validation data")
+
+  parser.add_argument("--distill_alpha",
+                      default=0.5,
+                      type=float,
+                      help="Weight for hard-label loss (default: 0.5)")
+
+  parser.add_argument("--distill_beta",
+                      default=0.5,
+                      type=float,
+                      help="Weight for distillation loss (default: 0.5)")
+
+  parser.add_argument("--distill_temperature",
+                      default=2.0,
+                      type=float,
+                      help="Distillation temperature (default: 2.0)")
+
   parser.add_argument("--num_plots",
                       default=10,
                       type=int,
@@ -189,7 +225,12 @@ def read_args():
                       action="store_true",
                       help="If save result for test")
 
-  args = parser.parse_args()
+  return parser
+
+
+def read_args():
+  """Returns args"""
+  args = build_arg_parser().parse_args()
   return args
 
 
@@ -224,8 +265,20 @@ def set_config(args, data_reader):
   config.summary = args.summary
   config.drop_rate = args.drop_rate
   config.class_weights = args.class_weights
+  config.distill_enable = bool(args.distill_enable)
+  config.distill_alpha = args.distill_alpha
+  config.distill_beta = args.distill_beta
+  config.distill_temperature = args.distill_temperature
 
   return config
+
+
+def unpack_train_batch(batch_values):
+  if len(batch_values) == 2:
+    return batch_values[0], batch_values[1], None
+  if len(batch_values) == 3:
+    return batch_values[0], batch_values[1], batch_values[2]
+  raise ValueError("Expected batch with 2 or 3 tensors, got {}".format(len(batch_values)))
 
 
 def train_fn(args, data_reader, data_reader_valid=None):
@@ -260,9 +313,15 @@ def train_fn(args, data_reader, data_reader_valid=None):
     init = tf.compat.v1.global_variables_initializer()
     sess.run(init)
 
-    if args.model_dir is not None:
+    if args.student_init_ckpt is not None:
+      logging.info("restoring student init checkpoint: %s", args.student_init_ckpt)
+      saver.restore(sess, args.student_init_ckpt)
+      model.reset_learning_rate(sess, learning_rate=args.learning_rate, global_step=0)
+    elif args.model_dir is not None:
       logging.info("restoring models...")
       latest_check_point = tf.train.latest_checkpoint(args.model_dir)
+      if latest_check_point is None:
+        raise ValueError("No checkpoint found under {}".format(args.model_dir))
       saver.restore(sess, latest_check_point)
       model.reset_learning_rate(sess, learning_rate=0.01, global_step=0)
 
@@ -278,8 +337,14 @@ def train_fn(args, data_reader, data_reader_valid=None):
     for epoch in range(args.epochs):
       progressbar = tqdm(range(0, data_reader.n_signal, args.batch_size), desc="{}: ".format(log_dir.split("/")[-1]))
       for step in progressbar:
-        X_batch, Y_batch = sess.run(batch)
-        loss_batch = model.train_on_batch(sess, X_batch, Y_batch, summary_writer, args.drop_rate)
+        X_batch, Y_batch, teacher_logits_batch = unpack_train_batch(sess.run(batch))
+        loss_batch = model.train_on_batch(
+            sess,
+            X_batch,
+            Y_batch,
+            summary_writer,
+            args.drop_rate,
+            teacher_logits_batch=teacher_logits_batch)
         if epoch < 1:
           mean_loss = loss_batch
         else:
@@ -295,8 +360,14 @@ def train_fn(args, data_reader, data_reader_valid=None):
         total_step_valid = 0
         progressbar = tqdm(range(0, data_reader_valid.n_signal, args.batch_size), desc="Valid: ")
         for step in progressbar:
-          X_batch, Y_batch = sess.run(batch_valid)
-          loss_batch, preds_batch = model.valid_on_batch(sess, X_batch, Y_batch, summary_writer, args.drop_rate)
+          X_batch, Y_batch, teacher_logits_batch = unpack_train_batch(sess.run(batch_valid))
+          loss_batch, preds_batch = model.valid_on_batch(
+              sess,
+              X_batch,
+              Y_batch,
+              summary_writer,
+              args.drop_rate,
+              teacher_logits_batch=teacher_logits_batch)
           total_step_valid += 1
           mean_loss_valid += (loss_batch-mean_loss_valid)/total_step_valid
           progressbar.set_description("Valid: loss={:.6f}, mean loss={:.6f}".format(loss_batch, mean_loss_valid))
@@ -512,22 +583,32 @@ def main(args):
   coord = tf.train.Coordinator()
 
   if args.mode == "train":
+    if args.distill_enable and args.distill_teacher_cache_dir is None:
+      raise ValueError("--distill_teacher_cache_dir is required when --distill_enable=1")
     with tf.compat.v1.name_scope('create_inputs'):
-      data_reader = DataReader(
+      reader_class = DataReaderDistill if args.distill_enable else DataReader
+      reader_kwargs = dict(
           signal_dir=args.train_signal_dir,
           signal_list=args.train_signal_list,
           noise_dir=args.train_noise_dir,
           noise_list=args.train_noise_list,
           queue_size=args.batch_size*2,
           coord=coord)
+      if args.distill_enable:
+        reader_kwargs["teacher_cache_dir"] = args.distill_teacher_cache_dir
+      data_reader = reader_class(**reader_kwargs)
       if (args.valid_signal_list is not None) and (args.valid_noise_list is not None):
-        data_reader_valid = DataReader(
+        valid_reader_kwargs = dict(
             signal_dir=args.valid_signal_dir,
             signal_list=args.valid_signal_list,
             noise_dir=args.valid_noise_dir,
             noise_list=args.valid_noise_list,
             queue_size=args.batch_size*2,
             coord=coord)
+        if args.distill_enable:
+          valid_reader_kwargs["teacher_cache_dir"] = (
+              args.distill_val_teacher_cache_dir or args.distill_teacher_cache_dir)
+        data_reader_valid = reader_class(**valid_reader_kwargs)
         logging.info("Dataset size: training %d, validation %d" %  (data_reader.n_signal, data_reader_valid.n_signal))
       else:
         data_reader_valid = None

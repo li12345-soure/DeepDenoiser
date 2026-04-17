@@ -90,6 +90,7 @@ def main():
 
     saver = tf.compat.v1.train.Saver(tf.compat.v1.global_variables())
 
+    logits_list = []
     preds_list = []
     with tf.compat.v1.Session() as sess:
         sess.run(tf.compat.v1.global_variables_initializer())
@@ -112,10 +113,13 @@ def main():
 
         for i in range(X_input.shape[0]):
             x_i = X_input[i:i + 1].astype(np.float32)
-            y_i = sess.run(model.preds, feed_dict={model.X: x_i})
-            preds_list.append(y_i)
+            logits_i, preds_i = sess.run([model.logits, model.preds], feed_dict={model.X: x_i})
+            logits_list.append(logits_i)
+            preds_list.append(preds_i)
 
+    logits = np.concatenate(logits_list, axis=0).astype(np.float32)
     preds = np.concatenate(preds_list, axis=0).astype(np.float32)
+    print(f"[INFO] TF logits shape: {logits.shape}")
     print(f"[INFO] TF preds shape: {preds.shape}")
 
     denoised = mask_to_waveform(preds, noisy_signal, nbt, nt, nch)
@@ -126,6 +130,7 @@ def main():
         input_waveform=batch_waveform[0].astype(np.float32),
         denoised_waveform=denoised[0].astype(np.float32),
         model_input=X_input.astype(np.float32),
+        logits=logits,
         preds=preds,
         dt=np.float32(dt),
     )

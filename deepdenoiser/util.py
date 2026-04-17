@@ -8,7 +8,10 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 from scipy import signal
 from tqdm import tqdm
 
-from data_reader import Config
+try:
+    from .data_reader import Config
+except ImportError:
+    from data_reader import Config
 
 matplotlib.use('agg')
 

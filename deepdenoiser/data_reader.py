@@ -387,6 +387,191 @@ class DataReader(object):
         return self.threads
 
 
+class DataReaderDistill(DataReader):
+    def __init__(
+        self,
+        signal_dir=None,
+        signal_list=None,
+        noise_dir=None,
+        noise_list=None,
+        teacher_cache_dir=None,
+        queue_size=None,
+        coord=None,
+        config=Config(),
+    ):
+        self.teacher_cache_dir = teacher_cache_dir
+        self.buffer_teacher = {}
+        super(DataReaderDistill, self).__init__(
+            signal_dir=signal_dir,
+            signal_list=signal_list,
+            noise_dir=noise_dir,
+            noise_list=noise_list,
+            queue_size=queue_size,
+            coord=coord,
+            config=config,
+        )
+
+    def add_queue(self):
+        with tf.device('/cpu:0'):
+            self.sample_placeholder = tf.compat.v1.placeholder(dtype=tf.float32, shape=None)
+            self.target_placeholder = tf.compat.v1.placeholder(dtype=tf.float32, shape=None)
+            self.teacher_logits_placeholder = tf.compat.v1.placeholder(dtype=tf.float32, shape=None)
+            self.queue = tf.queue.PaddingFIFOQueue(
+                self.queue_size,
+                ['float32', 'float32', 'float32'],
+                shapes=[self.config.X_shape, self.config.Y_shape, self.config.Y_shape],
+            )
+            self.enqueue = self.queue.enqueue(
+                [self.sample_placeholder, self.target_placeholder, self.teacher_logits_placeholder]
+            )
+        return 0
+
+    def get_teacher_cache_path(self, signal_path):
+        if self.teacher_cache_dir is None:
+            raise ValueError("teacher_cache_dir must be set for DataReaderDistill")
+        signal_root = os.path.normpath(self.signal_dir)
+        signal_path = os.path.normpath(signal_path)
+        rel_path = os.path.relpath(signal_path, signal_root)
+        return os.path.normpath(os.path.join(self.teacher_cache_dir, rel_path))
+
+    def load_teacher_logits(self, signal_path):
+        cache_path = self.get_teacher_cache_path(signal_path)
+        if cache_path not in self.buffer_teacher:
+            meta = np.load(cache_path)
+            if 'teacher_logits' not in meta.files:
+                raise KeyError("teacher_logits key not found in {}".format(cache_path))
+            teacher_logits = np.asarray(meta['teacher_logits'], dtype=np.float32)
+            if teacher_logits.ndim == 4 and teacher_logits.shape[0] == 1:
+                teacher_logits = teacher_logits[0]
+            if tuple(teacher_logits.shape) != tuple(self.config.Y_shape):
+                raise ValueError(
+                    "teacher_logits shape mismatch for {}: expected {}, got {}".format(
+                        cache_path, tuple(self.config.Y_shape), teacher_logits.shape
+                    )
+                )
+            self.buffer_teacher[cache_path] = teacher_logits
+        return self.buffer_teacher[cache_path]
+
+    def thread_main(self, sess, n_threads=1, start=0):
+        stop = False
+        while not stop:
+            index = list(range(start, self.n_signal, n_threads))
+            np.random.shuffle(index)
+            for i in index:
+                fname_signal = os.path.join(self.signal_dir, self.signal.iloc[i]['fname'])
+                try:
+                    if fname_signal not in self.buffer_signal:
+                        meta = np.load(fname_signal)
+                        data_FT = []
+                        snr = []
+                        for j in range(3):
+                            tmp_data = meta['data'][..., j]
+                            tmp_itp = meta['itp']
+                            snr.append(self.get_snr(tmp_data, tmp_itp))
+                            tmp_data -= np.mean(tmp_data)
+                            f, t, tmp_FT = scipy.signal.stft(
+                                tmp_data,
+                                fs=self.config.fs,
+                                nperseg=self.config.nperseg,
+                                nfft=self.config.nfft,
+                                boundary='zeros',
+                            )
+                            data_FT.append(tmp_FT)
+                        data_FT = np.stack(data_FT, axis=-1)
+                        self.buffer_signal[fname_signal] = {
+                            'data_FT': data_FT,
+                            'itp': tmp_itp,
+                            'channels': meta['channels'],
+                            'snr': snr,
+                        }
+                    meta_signal = self.buffer_signal[fname_signal]
+                except:
+                    logging.error("Failed reading signal: {}".format(fname_signal))
+                    continue
+                channels = meta_signal['channels'].tolist()
+                start_tp = meta_signal['itp'].tolist()
+
+                if channels not in self.buffer_channels_noise:
+                    self.buffer_channels_noise[channels] = self.noise[self.noise['channels'] == channels]
+                fname_noise = os.path.join(
+                    self.noise_dir, self.buffer_channels_noise[channels].sample(n=1).iloc[0]['fname']
+                )
+                try:
+                    if fname_noise not in self.buffer_noise:
+                        meta = np.load(fname_noise)
+                        data_FT = []
+                        for i in range(3):
+                            tmp_data = meta['data'][: self.config.nt, i]
+                            tmp_data -= np.mean(tmp_data)
+                            f, t, tmp_FT = scipy.signal.stft(
+                                tmp_data,
+                                fs=self.config.fs,
+                                nperseg=self.config.nperseg,
+                                nfft=self.config.nfft,
+                                boundary='zeros',
+                            )
+                            data_FT.append(tmp_FT)
+                        data_FT = np.stack(data_FT, axis=-1)
+                        self.buffer_noise[fname_noise] = {'data_FT': data_FT, 'channels': meta['channels']}
+                    meta_noise = self.buffer_noise[fname_noise]
+                except:
+                    logging.error("Failed reading noise: {}".format(fname_noise))
+                    continue
+
+                if self.coord.should_stop():
+                    stop = True
+                    break
+
+                j = np.random.choice([0, 1, 2])
+                if meta_signal['snr'][j] <= self.config.snr_threshold:
+                    continue
+
+                tmp_noise = meta_noise['data_FT'][..., j]
+                if np.isinf(tmp_noise).any() or np.isnan(tmp_noise).any() or (not np.any(tmp_noise)):
+                    continue
+                tmp_noise = tmp_noise / np.std(tmp_noise)
+
+                tmp_signal = np.zeros([self.X_shape[0], self.X_shape[1]], dtype=np.complex_)
+                if np.random.random() < 0.9:
+                    shift = np.random.randint(-self.X_shape[1], 1, None, 'int')
+                    tmp_signal[:, -shift:] = meta_signal['data_FT'][:, self.X_shape[1] : 2 * self.X_shape[1] + shift, j]
+                    if np.isinf(tmp_signal).any() or np.isnan(tmp_signal).any() or (not np.any(tmp_signal)):
+                        continue
+                    tmp_signal = tmp_signal / np.std(tmp_signal)
+                    tmp_signal = self.add_event(tmp_signal, channels, j)
+
+                    if np.random.random() < 0.2:
+                        tmp_signal = np.fliplr(tmp_signal)
+
+                ratio = 0
+                while ratio <= 0:
+                    ratio = self.config.noise_mean + np.random.randn() * self.config.noise_std
+                tmp_noisy_signal = tmp_signal + ratio * tmp_noise
+                noisy_signal = np.stack([tmp_noisy_signal.real, tmp_noisy_signal.imag], axis=-1)
+                if np.isnan(noisy_signal).any() or np.isinf(noisy_signal).any():
+                    continue
+                noisy_signal = noisy_signal / np.std(noisy_signal)
+                tmp_mask = np.abs(tmp_signal) / (np.abs(tmp_signal) + np.abs(ratio * tmp_noise) + 1e-4)
+                tmp_mask[tmp_mask >= 1] = 1
+                tmp_mask[tmp_mask <= 0] = 0
+                mask = np.zeros([tmp_mask.shape[0], tmp_mask.shape[1], self.n_class])
+                mask[:, :, 0] = tmp_mask
+                mask[:, :, 1] = 1 - tmp_mask
+                try:
+                    teacher_logits = self.load_teacher_logits(fname_signal)
+                except Exception as exc:
+                    logging.error("Failed reading teacher cache for {}: {}".format(fname_signal, exc))
+                    continue
+                sess.run(
+                    self.enqueue,
+                    feed_dict={
+                        self.sample_placeholder: noisy_signal,
+                        self.target_placeholder: mask,
+                        self.teacher_logits_placeholder: teacher_logits,
+                    },
+                )
+
+
 class DataReader_test(DataReader):
     def __init__(
         self,

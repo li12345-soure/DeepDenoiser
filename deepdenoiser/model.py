@@ -1,9 +1,16 @@
+import os
 import logging
 
 import numpy as np
+
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
+
 import tensorflow as tf
 
-from util import *
+try:
+    from .util import *
+except ImportError:
+    from util import *
 
 tf.compat.v1.disable_eager_execution()
 
@@ -100,9 +107,16 @@ class UNet:
         self.decay_rate = config.decay_rate
         self.momentum = config.momentum
         self.learning_rate = config.learning_rate
+        self.distill_enable = bool(getattr(config, 'distill_enable', False))
+        self.distill_alpha = getattr(config, 'distill_alpha', 0.5)
+        self.distill_beta = getattr(config, 'distill_beta', 0.5)
+        self.distill_temperature = getattr(config, 'distill_temperature', 2.0)
         self.global_step = tf.compat.v1.get_variable(name="global_step", initializer=0, dtype=tf.int32)
         self.summary_train = []
         self.summary_valid = []
+        self.teacher_logits = None
+        self.hard_loss = None
+        self.distill_loss = None
 
         self.build(input_batch, mode=mode)
 
@@ -129,10 +143,17 @@ class UNet:
                 dtype=tf.float32, shape=[None, None, None, self.n_class], name='y'
             )
             self.Y.set_shape([None, self.Y_shape[0], self.Y_shape[1], self.n_class])
+            if self.distill_enable and mode in ["train", "valid", "test"]:
+                self.teacher_logits = tf.compat.v1.placeholder(
+                    dtype=tf.float32, shape=[None, None, None, self.n_class], name='teacher_logits'
+                )
+                self.teacher_logits.set_shape([None, self.Y_shape[0], self.Y_shape[1], self.n_class])
         else:
             self.X = input_batch[0]
             if mode in ["train", "valid", "test"]:
                 self.Y = input_batch[1]
+            if ((mode in ["train", "valid"]) and (len(input_batch) >= 3)) or ((mode == "test") and (len(input_batch) == 3)):
+                self.teacher_logits = input_batch[2]
             self.input_batch = input_batch
 
         if mode == "pred":
@@ -373,18 +394,45 @@ class UNet:
         else:
             raise ValueError("Unknown loss function: " % self.loss_type)
 
-        tmp = tf.compat.v1.summary.scalar("train_loss", loss)
-        self.summary_train.append(tmp)
-        tmp = tf.compat.v1.summary.scalar("valid_loss", loss)
-        self.summary_valid.append(tmp)
-
+        self.hard_loss = tf.identity(loss, name="hard_loss")
+        weight_loss = None
         if self.weight_decay > 0:
             with tf.compat.v1.name_scope('weight_loss'):
                 tmp = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.REGULARIZATION_LOSSES)
                 weight_loss = tf.add_n(tmp, name="weight_loss")
-            self.loss = loss + weight_loss
+        if self.distill_enable and (self.teacher_logits is not None):
+            try:
+                from .distill_utils import combine_losses, distill_soft_ce
+            except ImportError:
+                from distill_utils import combine_losses, distill_soft_ce
+            self.distill_loss = distill_soft_ce(
+                self.logits, self.teacher_logits, temperature=self.distill_temperature
+            )
+            self.loss = combine_losses(
+                self.hard_loss,
+                self.distill_loss,
+                alpha=self.distill_alpha,
+                beta=self.distill_beta,
+                reg_loss=weight_loss,
+            )
+        elif weight_loss is not None:
+            self.loss = self.hard_loss + weight_loss
         else:
-            self.loss = loss
+            self.loss = self.hard_loss
+
+        tmp = tf.compat.v1.summary.scalar("hard_loss", self.hard_loss)
+        self.summary_train.append(tmp)
+        tmp = tf.compat.v1.summary.scalar("hard_loss", self.hard_loss)
+        self.summary_valid.append(tmp)
+        if self.distill_loss is not None:
+            tmp = tf.compat.v1.summary.scalar("distill_loss", self.distill_loss)
+            self.summary_train.append(tmp)
+            tmp = tf.compat.v1.summary.scalar("distill_loss", self.distill_loss)
+            self.summary_valid.append(tmp)
+        tmp = tf.compat.v1.summary.scalar("train_loss", self.loss)
+        self.summary_train.append(tmp)
+        tmp = tf.compat.v1.summary.scalar("valid_loss", self.loss)
+        self.summary_valid.append(tmp)
 
     def add_training_op(self):
         if self.optimizer == "momentum":
@@ -440,16 +488,24 @@ class UNet:
 
             optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=self.learning_rate_node)
 
-    def train_on_batch(self, sess, X_batch, Y_batch, summary_writer, drop_rate=0.0):
+    def train_on_batch(self, sess, X_batch, Y_batch, summary_writer, drop_rate=0.0, teacher_logits_batch=None):
         feed = {self.drop_rate: drop_rate, self.is_training: True, self.X: X_batch, self.Y: Y_batch}
+        if self.distill_enable and (self.teacher_logits is not None):
+            if teacher_logits_batch is None:
+                raise ValueError("teacher_logits_batch is required when distillation is enabled")
+            feed[self.teacher_logits] = teacher_logits_batch
         _, step_summary, step, loss = sess.run(
             [self.train_op, self.summary_train, self.global_step, self.loss], feed_dict=feed
         )
         summary_writer.add_summary(step_summary, step)
         return loss
 
-    def valid_on_batch(self, sess, X_batch, Y_batch, summary_writer, drop_rate=0.0):
+    def valid_on_batch(self, sess, X_batch, Y_batch, summary_writer, drop_rate=0.0, teacher_logits_batch=None):
         feed = {self.drop_rate: drop_rate, self.is_training: False, self.X: X_batch, self.Y: Y_batch}
+        if self.distill_enable and (self.teacher_logits is not None):
+            if teacher_logits_batch is None:
+                raise ValueError("teacher_logits_batch is required when distillation is enabled")
+            feed[self.teacher_logits] = teacher_logits_batch
         step_summary, step, loss, preds = sess.run(
             [self.summary_valid, self.global_step, self.loss, self.preds], feed_dict=feed
         )
