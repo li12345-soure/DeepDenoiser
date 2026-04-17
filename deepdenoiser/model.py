@@ -21,6 +21,9 @@ class ModelConfig:
     depths = 6
     filters_root = 8
     filters_cap = None
+    decoder_width_mult = 1.0
+    skip_bottleneck_mult = 1.0
+    use_skip_bottleneck = 0
     kernel_size = [3, 3]
     pool_size = [2, 2]
     dilation_rate = [1, 1]
@@ -90,6 +93,9 @@ class UNet:
         self.depths = config.depths
         self.filters_root = config.filters_root
         self.filters_cap = getattr(config, "filters_cap", None)
+        self.decoder_width_mult = config.decoder_width_mult
+        self.skip_bottleneck_mult = config.skip_bottleneck_mult
+        self.use_skip_bottleneck = config.use_skip_bottleneck
         self.kernel_size = config.kernel_size
         self.dilation_rate = config.dilation_rate
         self.pool_size = config.pool_size
@@ -265,7 +271,9 @@ class UNet:
         # up layers
         for depth in range(self.depths - 2, -1, -1):
             with tf.compat.v1.variable_scope("UpConv_%d" % depth):
-                filters = self.get_filters(2 ** depth * self.filters_root)
+                base_filters = int(2 ** depth * self.filters_root)
+                filters = max(2, int(base_filters * self.decoder_width_mult))
+                filters = self.get_filters(filters)
                 net = tf.compat.v1.layers.conv2d_transpose(
                     net,
                     filters=filters,
@@ -288,7 +296,27 @@ class UNet:
                 )
 
                 # skip connection
-                net = crop_and_concat(convs[depth], net)
+                skip = convs[depth]
+                if self.use_skip_bottleneck:
+                    skip_base_filters = int(2 ** depth * self.filters_root)
+                    skip_filters = max(2, int(skip_base_filters * self.skip_bottleneck_mult))
+                    skip_filters = self.get_filters(skip_filters)
+                    skip = tf.compat.v1.layers.conv2d(
+                        skip,
+                        filters=skip_filters,
+                        kernel_size=(1, 1),
+                        activation=None,
+                        use_bias=False,
+                        padding='same',
+                        kernel_initializer=self.initializer,
+                        kernel_regularizer=self.regularizer,
+                        name="skip_bottleneck_{}".format(depth + 1),
+                    )
+                    skip = tf.compat.v1.layers.batch_normalization(
+                        skip, training=self.is_training, name="skip_bottleneck_bn_{}".format(depth + 1)
+                    )
+                    skip = tf.nn.relu(skip, name="skip_bottleneck_relu_{}".format(depth + 1))
+                net = crop_and_concat(skip, net)
                 # net = crop_only(convs[depth], net)
 
                 net = tf.compat.v1.layers.conv2d(

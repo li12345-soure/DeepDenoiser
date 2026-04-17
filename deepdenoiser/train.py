@@ -72,6 +72,21 @@ def build_arg_parser():
                       type=int,
                       help="maximum filters per layer (default: None)")
 
+  parser.add_argument("--decoder_width_mult",
+                      default=1.0,
+                      type=float,
+                      help="decoder width multiplier (default: 1.0)")
+
+  parser.add_argument("--skip_bottleneck_mult",
+                      default=1.0,
+                      type=float,
+                      help="skip bottleneck multiplier (default: 1.0)")
+
+  parser.add_argument("--use_skip_bottleneck",
+                      default=0,
+                      type=int,
+                      help="use skip bottleneck (default: 0)")
+
   parser.add_argument("--depth",
                       default=6,
                       type=int,
@@ -245,6 +260,9 @@ def set_config(args, data_reader):
   config.depths = args.depth
   config.filters_root = args.filters_root
   config.filters_cap = args.filters_cap
+  config.decoder_width_mult = args.decoder_width_mult
+  config.skip_bottleneck_mult = args.skip_bottleneck_mult
+  config.use_skip_bottleneck = args.use_skip_bottleneck
   config.kernel_size = args.kernel_size
   config.pool_size = args.pool_size
   config.dilation_rate = args.dilation_rate
