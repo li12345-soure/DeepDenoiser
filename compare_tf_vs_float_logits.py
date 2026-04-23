@@ -2,6 +2,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 os.environ["TF_USE_LEGACY_KERAS"] = "1"
 
@@ -12,7 +13,8 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "deepdenoiser"))
 
-from model import ModelConfig, UNet
+from deepdenoiser.model import ModelConfig, UNet
+from deepdenoiser.train import build_arg_parser, set_config
 from run_tflite_on_npz_fixed import (
     load_npz_waveform,
     prepare_waveform,
@@ -34,18 +36,41 @@ def load_feature_from_waveform(npz_path: Path, dt_override=None, target_nt=3000)
     return X_input.astype(np.float32), batch_waveform, dt
 
 
-def run_tf_logits(checkpoint_dir: Path, X_input: np.ndarray) -> np.ndarray:
+def build_script_arg_parser():
+    parser = build_arg_parser()
+    parser.description = "Compare original TF logits vs float builtin-only TFLite logits"
+    parser.set_defaults(
+        mode="pred",
+        depth=4,
+        filters_root=6,
+        filters_cap=None,
+        decoder_width_mult=1.0,
+        skip_bottleneck_mult=1.0,
+        use_skip_bottleneck=0,
+    )
+    parser.add_argument("--checkpoint_dir", required=True, help=r".\model\190614-104802")
+    parser.add_argument("--float_model", required=True, help=r".\deepdenoiser_float_logits_builtin.tflite")
+    parser.add_argument("--npz", required=True, help=r".\Dataset\pred\BK_BKS_2008110908041793.npz")
+    parser.add_argument("--dt", type=float, default=None, help="Override dt if needed")
+    parser.add_argument("--target_nt", type=int, default=3000, help="Waveform length before STFT")
+    parser.add_argument("--save_npz", default="compare_tf_vs_float_logits.npz", help="Optional output npz")
+    return parser
+
+
+def build_pred_config(args):
+    args.mode = "pred"
+    data_reader = SimpleNamespace(
+        X_shape=ModelConfig.X_shape,
+        Y_shape=ModelConfig.Y_shape,
+    )
+    return set_config(args, data_reader)
+
+
+def run_tf_logits(args, checkpoint_dir: Path, X_input: np.ndarray) -> np.ndarray:
     tf.compat.v1.disable_eager_execution()
     tf.compat.v1.reset_default_graph()
 
-    config = ModelConfig(
-        depths=4,
-        filters_root=6,
-        kernel_size=[3, 3],
-        pool_size=[2, 2],
-        dilation_rate=[1, 1],
-        drop_rate=0,
-    )
+    config = build_pred_config(args)
     model = UNet(config=config, mode="pred")
     latest_ckpt = tf.train.latest_checkpoint(str(checkpoint_dir))
     if latest_ckpt is None:
@@ -112,14 +137,7 @@ def run_tflite_float_logits(model_path: Path, X_input: np.ndarray) -> np.ndarray
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Compare original TF logits vs float builtin-only TFLite logits")
-    parser.add_argument("--checkpoint_dir", required=True, help=r".\model\190614-104802")
-    parser.add_argument("--float_model", required=True, help=r".\deepdenoiser_float_logits_builtin.tflite")
-    parser.add_argument("--npz", required=True, help=r".\Dataset\pred\BK_BKS_2008110908041793.npz")
-    parser.add_argument("--dt", type=float, default=None, help="Override dt if needed")
-    parser.add_argument("--target_nt", type=int, default=3000, help="Waveform length before STFT")
-    parser.add_argument("--save_npz", default="compare_tf_vs_float_logits.npz", help="Optional output npz")
-    args = parser.parse_args()
+    args = build_script_arg_parser().parse_args()
 
     checkpoint_dir = Path(args.checkpoint_dir)
     float_model = Path(args.float_model)
@@ -137,7 +155,7 @@ def main():
     print(f"[INFO] input waveform shape: {batch_waveform.shape}")
     print(f"[INFO] dt={dt}")
 
-    tf_logits = run_tf_logits(checkpoint_dir, X_input)
+    tf_logits = run_tf_logits(args, checkpoint_dir, X_input)
     print(f"[INFO] TF logits shape: {tf_logits.shape}")
 
     float_logits = run_tflite_float_logits(float_model, X_input)

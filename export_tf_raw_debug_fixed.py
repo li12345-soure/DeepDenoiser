@@ -2,6 +2,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 os.environ["TF_USE_LEGACY_KERAS"] = "1"
 
@@ -12,7 +13,8 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "deepdenoiser"))
 
-from model import ModelConfig, UNet
+from deepdenoiser.model import ModelConfig, UNet
+from deepdenoiser.train import build_arg_parser, set_config
 from run_tflite_on_npz_fixed import (
     load_npz_waveform,
     mask_to_waveform,
@@ -21,9 +23,17 @@ from run_tflite_on_npz_fixed import (
 )
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Export original TF checkpoint raw model_input/preds for one NPZ"
+def build_script_arg_parser():
+    parser = build_arg_parser()
+    parser.description = "Export original TF checkpoint raw model_input/preds for one NPZ"
+    parser.set_defaults(
+        mode="pred",
+        depth=4,
+        filters_root=6,
+        filters_cap=None,
+        decoder_width_mult=1.0,
+        skip_bottleneck_mult=1.0,
+        use_skip_bottleneck=0,
     )
     parser.add_argument(
         "--checkpoint_dir",
@@ -52,7 +62,20 @@ def main():
         default=3000,
         help="Waveform length before STFT",
     )
-    args = parser.parse_args()
+    return parser
+
+
+def build_pred_config(args):
+    args.mode = "pred"
+    data_reader = SimpleNamespace(
+        X_shape=ModelConfig.X_shape,
+        Y_shape=ModelConfig.Y_shape,
+    )
+    return set_config(args, data_reader)
+
+
+def main():
+    args = build_script_arg_parser().parse_args()
 
     tf.compat.v1.reset_default_graph()
     tf.compat.v1.disable_eager_execution()
@@ -80,14 +103,7 @@ def main():
     X_input, noisy_signal, nbt, nt, nch = waveform_to_model_input(batch_waveform)
     print(f"[INFO] Model input feature shape: {X_input.shape} [batch*chn, 31, 201, 2]")
 
-    config = ModelConfig(
-        depths=4,
-        filters_root=6,
-        kernel_size=[3, 3],
-        pool_size=[2, 2],
-        dilation_rate=[1, 1],
-        drop_rate=0,
-    )
+    config = build_pred_config(args)
     model = UNet(config=config, mode="pred")
 
     latest_ckpt = tf.train.latest_checkpoint(str(checkpoint_dir))

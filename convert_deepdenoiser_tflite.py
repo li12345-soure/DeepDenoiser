@@ -32,10 +32,10 @@ python convert_deepdenoiser_tflite.py \
 from __future__ import annotations
 
 import argparse
-import importlib
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Generator, Iterable, List
 
 os.environ["TF_USE_LEGACY_KERAS"] = "1"
@@ -44,9 +44,26 @@ import numpy as np
 
 import tensorflow as tf
 
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "deepdenoiser"))
+
+from deepdenoiser.model import ModelConfig, UNet
+from deepdenoiser.train import build_arg_parser, set_config
+
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Convert DeepDenoiser checkpoint to TFLite")
+    parser = build_arg_parser()
+    parser.description = "Convert DeepDenoiser checkpoint to TFLite"
+    parser.set_defaults(
+        mode="pred",
+        depth=4,
+        filters_root=6,
+        filters_cap=None,
+        decoder_width_mult=1.0,
+        skip_bottleneck_mult=1.0,
+        use_skip_bottleneck=0,
+    )
     parser.add_argument("--repo_root", required=True, help="Path to DeepDenoiser repo root")
     parser.add_argument(
         "--checkpoint_dir",
@@ -108,6 +125,15 @@ def ensure_repo_importable(repo_root: Path) -> None:
     sys.path.insert(0, str(repo_root))
 
 
+def build_pred_config(args):
+    args.mode = "pred"
+    data_reader = SimpleNamespace(
+        X_shape=ModelConfig.X_shape,
+        Y_shape=ModelConfig.Y_shape,
+    )
+    return set_config(args, data_reader)
+
+
 
 def load_feature_file(path: Path) -> np.ndarray:
     if path.suffix == ".npy":
@@ -160,18 +186,7 @@ def main() -> None:
 
     tf.compat.v1.disable_eager_execution()
 
-    model_module = importlib.import_module("model")
-    ModelConfig = getattr(model_module, "ModelConfig")
-    UNet = getattr(model_module, "UNet")
-
-    config = ModelConfig(
-        depths=4,
-        filters_root=6,
-        kernel_size=[3, 3],
-        pool_size=[2, 2],
-        dilation_rate=[1, 1],
-        drop_rate=0,
-    )
+    config = build_pred_config(args)
     model = UNet(config=config, mode="pred")
 
     sess_config = tf.compat.v1.ConfigProto()

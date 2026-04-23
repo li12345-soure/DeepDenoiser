@@ -1,0 +1,113 @@
+=== TFLite ModelAnalyzer ===
+
+Your TFLite model has '1' subgraph(s). In the subgraph description below,
+T# represents the Tensor numbers. For example, in Subgraph#0, the CONV_2D op takes
+tensor #0 and tensor #42 and tensor #43 as input and produces tensor #44 as output.
+
+Subgraph#0 main(T#0) -> [T#67]
+  Op#0 CONV_2D(T#0, T#42, T#43) -> [T#44]
+  Op#1 CONV_2D(T#44, T#34, T#13) -> [T#45]
+  Op#2 CONV_2D(T#45, T#33, T#12) -> [T#46]
+  Op#3 CONV_2D(T#46, T#32, T#11) -> [T#47]
+  Op#4 CONV_2D(T#47, T#31, T#10) -> [T#48]
+  Op#5 CONV_2D(T#48, T#30, T#9) -> [T#49]
+  Op#6 CONV_2D(T#49, T#29, T#8) -> [T#50]
+  Op#7 CONV_2D(T#50, T#28, T#7) -> [T#51]
+  Op#8 TRANSPOSE_CONV(T#35[1, 8, 52, 24], T#20, T#51, T#19) -> [T#52]
+  Op#9 SLICE(T#52, T#41[0, 0, 0, 0], T#38[-1, 8, 51, 24]) -> [T#53]
+  Op#10 CONV_2D(T#49, T#27, T#6) -> [T#54]
+  Op#11 CONCATENATION(T#54, T#53) -> [T#55]
+  Op#12 CONV_2D(T#55, T#26, T#5) -> [T#56]
+  Op#13 TRANSPOSE_CONV(T#36[1, 16, 102, 12], T#18, T#56, T#17) -> [T#57]
+  Op#14 SLICE(T#57, T#41[0, 0, 0, 0], T#39[-1, 16, 101, 12]) -> [T#58]
+  Op#15 CONV_2D(T#47, T#25, T#4) -> [T#59]
+  Op#16 CONCATENATION(T#59, T#58) -> [T#60]
+  Op#17 CONV_2D(T#60, T#24, T#3) -> [T#61]
+  Op#18 TRANSPOSE_CONV(T#37[1, 32, 202, 6], T#16, T#61, T#15) -> [T#62]
+  Op#19 SLICE(T#62, T#41[0, 0, 0, 0], T#40[-1, 31, 201, 6]) -> [T#63]
+  Op#20 CONV_2D(T#45, T#23, T#2) -> [T#64]
+  Op#21 CONCATENATION(T#64, T#63) -> [T#65]
+  Op#22 CONV_2D(T#65, T#22, T#1) -> [T#66]
+  Op#23 CONV_2D(T#66, T#21, T#14) -> [T#67]
+
+Tensors of Subgraph#0
+  T#0(X) shape:[1, 31, 201, 2], type:FLOAT32
+  T#1(arith.constant) shape:[6], type:FLOAT32 RO 24 bytes, buffer: 2, data:[0.301774, -0.131096, 0.439545, 0.826901, 0.538955, ...]
+  T#2(arith.constant1) shape:[3], type:FLOAT32 RO 12 bytes, buffer: 3, data:[-0.132197, -0.431429, -0.48725]
+  T#3(arith.constant2) shape:[12], type:FLOAT32 RO 48 bytes, buffer: 4, data:[0.682122, -0.507243, 0.563429, -0.0717422, 0.411837, ...]
+  T#4(arith.constant3) shape:[6], type:FLOAT32 RO 24 bytes, buffer: 5, data:[0.103916, -0.0561872, 0.309201, 0.163176, -0.354268, ...]
+  T#5(arith.constant4) shape:[24], type:FLOAT32 RO 96 bytes, buffer: 6, data:[0.232683, -0.415817, 0.0804157, 0.273798, 0.390441, ...]
+  T#6(arith.constant5) shape:[12], type:FLOAT32 RO 48 bytes, buffer: 7, data:[-0.310569, -0.0829982, -0.328564, -0.0178472, -0.189342, ...]
+  T#7(arith.constant6) shape:[48], type:FLOAT32 RO 192 bytes, buffer: 8, data:[0.0723671, -0.219671, 0.208444, -0.0318925, 0.0123634, ...]
+  T#8(arith.constant7) shape:[24], type:FLOAT32 RO 96 bytes, buffer: 9, data:[-0.297145, -0.279207, 0.656239, 0.595728, 0.0997409, ...]
+  T#9(arith.constant8) shape:[24], type:FLOAT32 RO 96 bytes, buffer: 10, data:[0.377525, -0.0997787, -0.329598, 0.224656, -0.307249, ...]
+  T#10(arith.constant9) shape:[12], type:FLOAT32 RO 48 bytes, buffer: 11, data:[-0.228588, -0.0209998, 0.369135, -0.00354464, -0.028636, ...]
+  T#11(arith.constant10) shape:[12], type:FLOAT32 RO 48 bytes, buffer: 12, data:[0.00406437, 0.338032, 0.505199, 0.120765, -0.690951, ...]
+  T#12(arith.constant11) shape:[6], type:FLOAT32 RO 24 bytes, buffer: 13, data:[0.135127, -0.354098, 0.377122, 0.273928, -0.625, ...]
+  T#13(arith.constant12) shape:[6], type:FLOAT32 RO 24 bytes, buffer: 14, data:[0.126724, 0.259973, -0.433367, -0.00794677, -0.431686, ...]
+  T#14(arith.constant13) shape:[2], type:FLOAT32 RO 8 bytes, buffer: 15, data:[-0.0365487, 0.0365487]
+  T#15(arith.constant14) shape:[6], type:FLOAT32 RO 24 bytes, buffer: 16, data:[0.0067667, 0.0313017, 0.146072, 0.129815, -0.187537, ...]
+  T#16(arith.constant15) shape:[6, 3, 3, 12], type:FLOAT32 RO 2592 bytes, buffer: 17, data:[-0.101174, 0.0989793, -0.187109, 0.203311, 0.1063, ...]
+  T#17(arith.constant16) shape:[12], type:FLOAT32 RO 48 bytes, buffer: 18, data:[-0.285449, 0.295077, 0.00375868, 0.00932482, 0.347136, ...]
+  T#18(arith.constant17) shape:[12, 3, 3, 24], type:FLOAT32 RO 10368 bytes, buffer: 19, data:[0.0313346, 0.22572, 0.199233, 0.179846, 0.0578687, ...]
+  T#19(arith.constant18) shape:[24], type:FLOAT32 RO 96 bytes, buffer: 20, data:[-0.133273, 0.353111, 0.0593419, 0.0783538, -0.0443019, ...]
+  T#20(arith.constant19) shape:[24, 3, 3, 48], type:FLOAT32 RO 41472 bytes, buffer: 21, data:[0.0099477, 0.0362188, -0.1299, 0.0233352, 0.000320605, ...]
+  T#21(arith.constant20) shape:[2, 1, 1, 6], type:FLOAT32 RO 48 bytes, buffer: 22, data:[-0.486139, 0.2769, -0.771261, -0.787679, -0.631103, ...]
+  T#22(arith.constant21) shape:[6, 3, 3, 9], type:FLOAT32 RO 1944 bytes, buffer: 23, data:[0.146551, -0.00520763, -0.0595, -0.225354, 0.0514977, ...]
+  T#23(arith.constant22) shape:[3, 1, 1, 6], type:FLOAT32 RO 72 bytes, buffer: 24, data:[-0.167589, 0.172491, -0.674867, 0.731515, -0.123683, ...]
+  T#24(arith.constant23) shape:[12, 3, 3, 18], type:FLOAT32 RO 7776 bytes, buffer: 25, data:[-0.000587775, -0.0756114, -0.0114886, 0.0710601, -0.00542796, ...]
+  T#25(arith.constant24) shape:[6, 1, 1, 12], type:FLOAT32 RO 288 bytes, buffer: 26, data:[-0.0488223, 0.157485, 0.74499, -0.359288, -0.370143, ...]
+  T#26(arith.constant25) shape:[24, 3, 3, 36], type:FLOAT32 RO 31104 bytes, buffer: 27, data:[-0.0601983, -0.0290598, -0.0421858, -0.0459366, -0.0648375, ...]
+  T#27(arith.constant26) shape:[12, 1, 1, 24], type:FLOAT32 RO 1152 bytes, buffer: 28, data:[0.308795, 0.288648, 0.0254306, -0.305273, 0.291543, ...]
+  T#28(arith.constant27) shape:[48, 3, 3, 24], type:FLOAT32 RO 41472 bytes, buffer: 29, data:[-0.0458348, 0.0521469, 0.132167, 0.106775, 0.107099, ...]
+  T#29(arith.constant28) shape:[24, 3, 3, 24], type:FLOAT32 RO 20736 bytes, buffer: 30, data:[0.0368222, 0.0442206, 0.124807, -0.00767965, 0.0458099, ...]
+  T#30(arith.constant29) shape:[24, 3, 3, 12], type:FLOAT32 RO 10368 bytes, buffer: 31, data:[0.16991, -0.0546296, -0.146392, -0.278737, -0.191286, ...]
+  T#31(arith.constant30) shape:[12, 3, 3, 12], type:FLOAT32 RO 5184 bytes, buffer: 32, data:[-0.100652, -0.12216, -0.136534, 0.00927409, 0.10283, ...]
+  T#32(arith.constant31) shape:[12, 3, 3, 6], type:FLOAT32 RO 2592 bytes, buffer: 33, data:[0.00401374, -0.16538, -0.148006, -0.144866, 0.0827804, ...]
+  T#33(arith.constant32) shape:[6, 3, 3, 6], type:FLOAT32 RO 1296 bytes, buffer: 34, data:[-0.0626277, 0.126497, -0.230905, 0.0503675, -0.158164, ...]
+  T#34(arith.constant33) shape:[6, 3, 3, 6], type:FLOAT32 RO 1296 bytes, buffer: 35, data:[0.219921, 0.0836952, 0.062247, 0.184518, 0.182208, ...]
+  T#35(arith.constant34) shape:[4], type:INT32 RO 16 bytes, buffer: 36, data:[1, 8, 52, 24]
+  T#36(arith.constant35) shape:[4], type:INT32 RO 16 bytes, buffer: 37, data:[1, 16, 102, 12]
+  T#37(arith.constant36) shape:[4], type:INT32 RO 16 bytes, buffer: 38, data:[1, 32, 202, 6]
+  T#38(arith.constant37) shape:[4], type:INT32 RO 16 bytes, buffer: 39, data:[-1, 8, 51, 24]
+  T#39(arith.constant38) shape:[4], type:INT32 RO 16 bytes, buffer: 40, data:[-1, 16, 101, 12]
+  T#40(arith.constant39) shape:[4], type:INT32 RO 16 bytes, buffer: 41, data:[-1, 31, 201, 6]
+  T#41(arith.constant40) shape:[4], type:INT32 RO 16 bytes, buffer: 42, data:[0, 0, 0, 0]
+  T#42(Input/input_conv/Conv2D) shape:[6, 3, 3, 2], type:FLOAT32 RO 432 bytes, buffer: 43, data:[-0.233875, 0.24553, 0.127464, 0.33388, -0.35851, ...]
+  T#43(Input/input_relu;Input/input_bn/FusedBatchNormV3;Input/input_conv/Conv2D) shape:[6], type:FLOAT32 RO 24 bytes, buffer: 44, data:[-0.00901642, 0.0160436, -0.000955667, 0.011251, 0.00571678, ...]
+  T#44(Input/input_relu;Input/input_bn/FusedBatchNormV3;Input/input_conv/Conv2D1) shape:[1, 31, 201, 6], type:FLOAT32
+  T#45(DownConv_0/down_relu1_1;DownConv_0/down_bn1_1/FusedBatchNormV3;DownConv_0/down_conv1_1/Conv2D) shape:[1, 31, 201, 6], type:FLOAT32
+  T#46(DownConv_0/down_relu3_1;DownConv_0/down_bn3_1/FusedBatchNormV3;DownConv_0/down_conv3_1/Conv2D) shape:[1, 16, 101, 6], type:FLOAT32
+  T#47(DownConv_1/down_relu1_2;DownConv_1/down_bn1_2/FusedBatchNormV3;DownConv_1/down_conv1_2/Conv2D) shape:[1, 16, 101, 12], type:FLOAT32
+  T#48(DownConv_1/down_relu3_2;DownConv_1/down_bn3_2/FusedBatchNormV3;DownConv_1/down_conv3_2/Conv2D) shape:[1, 8, 51, 12], type:FLOAT32
+  T#49(DownConv_2/down_relu1_3;DownConv_2/down_bn1_3/FusedBatchNormV3;DownConv_2/down_conv1_3/Conv2D) shape:[1, 8, 51, 24], type:FLOAT32
+  T#50(DownConv_2/down_relu3_3;DownConv_2/down_bn3_3/FusedBatchNormV3;DownConv_2/down_conv3_3/Conv2D) shape:[1, 4, 26, 24], type:FLOAT32
+  T#51(DownConv_3/down_relu1_4;DownConv_3/down_bn1_4/FusedBatchNormV3;DownConv_3/down_conv1_4/Conv2D) shape:[1, 4, 26, 48], type:FLOAT32
+  T#52(UpConv_2/up_relu0_3;UpConv_2/up_bn0_3/FusedBatchNormV3;UpConv_2/up_conv0_3/conv2d_transpose) shape:[1, 8, 52, 24], type:FLOAT32
+  T#53(UpConv_2/Slice) shape:[1, 8, 51, 24], type:FLOAT32
+  T#54(UpConv_2/skip_bottleneck_relu_3;UpConv_2/skip_bottleneck_bn_3/FusedBatchNormV3;UpConv_2/skip_bottleneck_3/Conv2D) shape:[1, 8, 51, 12], type:FLOAT32
+  T#55(UpConv_2/concat) shape:[1, 8, 51, 36], type:FLOAT32
+  T#56(UpConv_2/up_relu1_3;UpConv_2/up_bn1_3/FusedBatchNormV3;UpConv_2/up_conv1_3/Conv2D) shape:[1, 8, 51, 24], type:FLOAT32
+  T#57(UpConv_1/up_relu0_2;UpConv_1/up_bn0_2/FusedBatchNormV3;UpConv_1/up_conv0_2/conv2d_transpose) shape:[1, 16, 102, 12], type:FLOAT32
+  T#58(UpConv_1/Slice) shape:[1, 16, 101, 12], type:FLOAT32
+  T#59(UpConv_1/skip_bottleneck_relu_2;UpConv_1/skip_bottleneck_bn_2/FusedBatchNormV3;UpConv_1/skip_bottleneck_2/Conv2D) shape:[1, 16, 101, 6], type:FLOAT32
+  T#60(UpConv_1/concat) shape:[1, 16, 101, 18], type:FLOAT32
+  T#61(UpConv_1/up_relu1_2;UpConv_1/up_bn1_2/FusedBatchNormV3;UpConv_1/up_conv1_2/Conv2D) shape:[1, 16, 101, 12], type:FLOAT32
+  T#62(UpConv_0/up_relu0_1;UpConv_0/up_bn0_1/FusedBatchNormV3;UpConv_0/up_conv0_1/conv2d_transpose) shape:[1, 32, 202, 6], type:FLOAT32
+  T#63(UpConv_0/Slice) shape:[1, 31, 201, 6], type:FLOAT32
+  T#64(UpConv_0/skip_bottleneck_relu_1;UpConv_0/skip_bottleneck_bn_1/FusedBatchNormV3;UpConv_0/skip_bottleneck_1/Conv2D) shape:[1, 31, 201, 3], type:FLOAT32
+  T#65(UpConv_0/concat) shape:[1, 31, 201, 9], type:FLOAT32
+  T#66(UpConv_0/up_relu1_1;UpConv_0/up_bn1_1/FusedBatchNormV3;UpConv_0/up_conv1_1/Conv2D) shape:[1, 31, 201, 6], type:FLOAT32
+  T#67(Output/output_conv/BiasAdd) shape:[1, 31, 201, 2], type:FLOAT32
+
+---------------------------------------------------------------
+              Model size:     190472 bytes
+    Non-data buffer size:       9088 bytes (04.77 %)
+  Total data buffer size:     181384 bytes (95.23 %)
+    (Zero value buffers):         16 bytes (00.01 %)
+
+* Buffers of TFLite model are mostly used for constant tensors.
+  And zero value buffers are buffers filled with zeros.
+  Non-data buffers area are used to store operators, subgraphs and etc.
+  You can find more details from https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/schema/schema.fbs
+

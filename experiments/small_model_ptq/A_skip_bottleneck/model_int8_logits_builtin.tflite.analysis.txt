@@ -1,0 +1,113 @@
+=== TFLite ModelAnalyzer ===
+
+Your TFLite model has '1' subgraph(s). In the subgraph description below,
+T# represents the Tensor numbers. For example, in Subgraph#0, the CONV_2D op takes
+tensor #0 and tensor #43 and tensor #42 as input and produces tensor #44 as output.
+
+Subgraph#0 main(T#0) -> [T#67]
+  Op#0 CONV_2D(T#0, T#43, T#42[-10, 20, -1, 11, 6, ...]) -> [T#44]
+  Op#1 CONV_2D(T#44, T#41, T#40[271, 648, -996, -21, -1258, ...]) -> [T#45]
+  Op#2 CONV_2D(T#45, T#39, T#38[316, -1593, 1058, 691, -3566, ...]) -> [T#46]
+  Op#3 CONV_2D(T#46, T#37, T#36[21, 1469, 3066, 454, -2985, ...]) -> [T#47]
+  Op#4 CONV_2D(T#47, T#35, T#34[-2514, -160, 2301, -36, -220, ...]) -> [T#48]
+  Op#5 CONV_2D(T#48, T#33, T#32[2572, -881, -2673, 1484, -1961, ...]) -> [T#49]
+  Op#6 CONV_2D(T#49, T#31, T#30[-6996, -5675, 15574, 12715, 1921, ...]) -> [T#50]
+  Op#7 CONV_2D(T#50, T#29, T#28[1666, -4471, 4007, -580, 260, ...]) -> [T#51]
+  Op#8 TRANSPOSE_CONV(T#1[1, 8, 52, 24], T#27, T#51, T#26[-5158, 16565, 2321, 3054, -1575, ...]) -> [T#52]
+  Op#9 SLICE(T#52, T#2[0, 0, 0, 0], T#3[-1, 8, 51, 24]) -> [T#53]
+  Op#10 CONV_2D(T#49, T#25, T#24[-2530, -527, -3172, -122, -1183, ...]) -> [T#54]
+  Op#11 CONCATENATION(T#54, T#53) -> [T#55]
+  Op#12 CONV_2D(T#55, T#23, T#22[8937, -11385, 2110, 6460, 13494, ...]) -> [T#56]
+  Op#13 TRANSPOSE_CONV(T#4[1, 16, 102, 12], T#21, T#56, T#20[-6649, 6771, 77, 209, 9104, ...]) -> [T#57]
+  Op#14 SLICE(T#57, T#2[0, 0, 0, 0], T#5[-1, 16, 101, 12]) -> [T#58]
+  Op#15 CONV_2D(T#47, T#19, T#18[239, -157, 1102, 474, -859, ...]) -> [T#59]
+  Op#16 CONCATENATION(T#59, T#58) -> [T#60]
+  Op#17 CONV_2D(T#60, T#17, T#16[7733, -6069, 4674, -672, 3695, ...]) -> [T#61]
+  Op#18 TRANSPOSE_CONV(T#6[1, 32, 202, 6], T#15, T#61, T#14[91, 435, 2083, 1750, -2355, ...]) -> [T#62]
+  Op#19 SLICE(T#62, T#2[0, 0, 0, 0], T#7[-1, 31, 201, 6]) -> [T#63]
+  Op#20 CONV_2D(T#45, T#13, T#12[-171, -473, -582]) -> [T#64]
+  Op#21 CONCATENATION(T#64, T#63) -> [T#65]
+  Op#22 CONV_2D(T#65, T#11, T#10[1259, -396, 1935, 2846, 2053, ...]) -> [T#66]
+  Op#23 CONV_2D(T#66, T#9, T#8[-170, 160]) -> [T#67]
+
+Tensors of Subgraph#0
+  T#0(X) shape:[1, 31, 201, 2], type:INT8
+  T#1(arith.constant) shape:[4], type:INT32 RO 16 bytes, buffer: 2, data:[1, 8, 52, 24]
+  T#2(arith.constant1) shape:[4], type:INT32 RO 16 bytes, buffer: 3, data:[0, 0, 0, 0]
+  T#3(arith.constant2) shape:[4], type:INT32 RO 16 bytes, buffer: 4, data:[-1, 8, 51, 24]
+  T#4(arith.constant3) shape:[4], type:INT32 RO 16 bytes, buffer: 5, data:[1, 16, 102, 12]
+  T#5(arith.constant4) shape:[4], type:INT32 RO 16 bytes, buffer: 6, data:[-1, 16, 101, 12]
+  T#6(arith.constant5) shape:[4], type:INT32 RO 16 bytes, buffer: 7, data:[1, 32, 202, 6]
+  T#7(arith.constant6) shape:[4], type:INT32 RO 16 bytes, buffer: 8, data:[-1, 31, 201, 6]
+  T#8(tfl.pseudo_qconst) shape:[2], type:INT32 RO 8 bytes, buffer: 9, data:[-170, 160]
+  T#9(tfl.pseudo_qconst1) shape:[2, 1, 1, 6], type:INT8 RO 12 bytes, buffer: 10, data:[., -, ., ., ., ...]
+  T#10(tfl.pseudo_qconst2) shape:[6], type:INT32 RO 24 bytes, buffer: 11, data:[1259, -396, 1935, 2846, 2053, ...]
+  T#11(tfl.pseudo_qconst3) shape:[6, 3, 3, 9], type:INT8 RO 486 bytes, buffer: 12, data:[R, ., ., ., ., ...]
+  T#12(tfl.pseudo_qconst4) shape:[3], type:INT32 RO 12 bytes, buffer: 13, data:[-171, -473, -582]
+  T#13(tfl.pseudo_qconst5) shape:[3, 1, 1, 6], type:INT8 RO 18 bytes, buffer: 14, data:[., ., ., ., ., ...]
+  T#14(tfl.pseudo_qconst6) shape:[6], type:INT32 RO 24 bytes, buffer: 15, data:[91, 435, 2083, 1750, -2355, ...]
+  T#15(tfl.pseudo_qconst7) shape:[6, 3, 3, 12], type:INT8 RO 648 bytes, buffer: 16, data:[., ., ., =,  , ...]
+  T#16(tfl.pseudo_qconst8) shape:[12], type:INT32 RO 48 bytes, buffer: 17, data:[7733, -6069, 4674, -672, 3695, ...]
+  T#17(tfl.pseudo_qconst9) shape:[12, 3, 3, 18], type:INT8 RO 1944 bytes, buffer: 18, data:[., ., ., =, ., ...]
+  T#18(tfl.pseudo_qconst10) shape:[6], type:INT32 RO 24 bytes, buffer: 19, data:[239, -157, 1102, 474, -859, ...]
+  T#19(tfl.pseudo_qconst11) shape:[6, 1, 1, 12], type:INT8 RO 72 bytes, buffer: 20, data:[., ., v, ., ., ...]
+  T#20(tfl.pseudo_qconst12) shape:[12], type:INT32 RO 48 bytes, buffer: 21, data:[-6649, 6771, 77, 209, 9104, ...]
+  T#21(tfl.pseudo_qconst13) shape:[12, 3, 3, 24], type:INT8 RO 2592 bytes, buffer: 22, data:[., n, a, W, ., ...]
+  T#22(tfl.pseudo_qconst14) shape:[24], type:INT32 RO 96 bytes, buffer: 23, data:[8937, -11385, 2110, 6460, 13494, ...]
+  T#23(tfl.pseudo_qconst15) shape:[24, 3, 3, 36], type:INT8 RO 7776 bytes, buffer: 24, data:[., ., ., ., ., ...]
+  T#24(tfl.pseudo_qconst16) shape:[12], type:INT32 RO 48 bytes, buffer: 25, data:[-2530, -527, -3172, -122, -1183, ...]
+  T#25(tfl.pseudo_qconst17) shape:[12, 1, 1, 24], type:INT8 RO 288 bytes, buffer: 26, data:[a, [, ., ., \, ...]
+  T#26(tfl.pseudo_qconst18) shape:[24], type:INT32 RO 96 bytes, buffer: 27, data:[-5158, 16565, 2321, 3054, -1575, ...]
+  T#27(tfl.pseudo_qconst19) shape:[24, 3, 3, 48], type:INT8 RO 10368 bytes, buffer: 28, data:[., ., ., ., ., ...]
+  T#28(tfl.pseudo_qconst20) shape:[48], type:INT32 RO 192 bytes, buffer: 29, data:[1666, -4471, 4007, -580, 260, ...]
+  T#29(tfl.pseudo_qconst21) shape:[48, 3, 3, 24], type:INT8 RO 10368 bytes, buffer: 30, data:[., (, f, R, S, ...]
+  T#30(tfl.pseudo_qconst22) shape:[24], type:INT32 RO 96 bytes, buffer: 31, data:[-6996, -5675, 15574, 12715, 1921, ...]
+  T#31(tfl.pseudo_qconst23) shape:[24, 3, 3, 24], type:INT8 RO 5184 bytes, buffer: 32, data:[", (, r, ., *, ...]
+  T#32(tfl.pseudo_qconst24) shape:[24], type:INT32 RO 96 bytes, buffer: 33, data:[2572, -881, -2673, 1484, -1961, ...]
+  T#33(tfl.pseudo_qconst25) shape:[24, 3, 3, 12], type:INT8 RO 2592 bytes, buffer: 34, data:[M, ., ., ., ., ...]
+  T#34(tfl.pseudo_qconst26) shape:[12], type:INT32 RO 48 bytes, buffer: 35, data:[-2514, -160, 2301, -36, -220, ...]
+  T#35(tfl.pseudo_qconst27) shape:[12, 3, 3, 12], type:INT8 RO 1296 bytes, buffer: 36, data:[., ., ., ., N, ...]
+  T#36(tfl.pseudo_qconst28) shape:[12], type:INT32 RO 48 bytes, buffer: 37, data:[21, 1469, 3066, 454, -2985, ...]
+  T#37(tfl.pseudo_qconst29) shape:[12, 3, 3, 6], type:INT8 RO 648 bytes, buffer: 38, data:[., ., ., ., (, ...]
+  T#38(tfl.pseudo_qconst30) shape:[6], type:INT32 RO 24 bytes, buffer: 39, data:[316, -1593, 1058, 691, -3566, ...]
+  T#39(tfl.pseudo_qconst31) shape:[6, 3, 3, 6], type:INT8 RO 324 bytes, buffer: 40, data:[., (, ., ., ., ...]
+  T#40(tfl.pseudo_qconst32) shape:[6], type:INT32 RO 24 bytes, buffer: 41, data:[271, 648, -996, -21, -1258, ...]
+  T#41(tfl.pseudo_qconst33) shape:[6, 3, 3, 6], type:INT8 RO 324 bytes, buffer: 42, data:[G, ., ., <, ;, ...]
+  T#42(tfl.pseudo_qconst34) shape:[6], type:INT32 RO 24 bytes, buffer: 43, data:[-10, 20, -1, 11, 6, ...]
+  T#43(tfl.pseudo_qconst35) shape:[6, 3, 3, 2], type:INT8 RO 108 bytes, buffer: 44, data:[., R, +, p, ., ...]
+  T#44(Input/input_relu;Input/input_bn/FusedBatchNormV3;Input/input_conv/Conv2D1) shape:[1, 31, 201, 6], type:INT8
+  T#45(DownConv_0/down_relu1_1;DownConv_0/down_bn1_1/FusedBatchNormV3;DownConv_0/down_conv1_1/Conv2D) shape:[1, 31, 201, 6], type:INT8
+  T#46(DownConv_0/down_relu3_1;DownConv_0/down_bn3_1/FusedBatchNormV3;DownConv_0/down_conv3_1/Conv2D) shape:[1, 16, 101, 6], type:INT8
+  T#47(DownConv_1/down_relu1_2;DownConv_1/down_bn1_2/FusedBatchNormV3;DownConv_1/down_conv1_2/Conv2D) shape:[1, 16, 101, 12], type:INT8
+  T#48(DownConv_1/down_relu3_2;DownConv_1/down_bn3_2/FusedBatchNormV3;DownConv_1/down_conv3_2/Conv2D) shape:[1, 8, 51, 12], type:INT8
+  T#49(DownConv_2/down_relu1_3;DownConv_2/down_bn1_3/FusedBatchNormV3;DownConv_2/down_conv1_3/Conv2D) shape:[1, 8, 51, 24], type:INT8
+  T#50(DownConv_2/down_relu3_3;DownConv_2/down_bn3_3/FusedBatchNormV3;DownConv_2/down_conv3_3/Conv2D) shape:[1, 4, 26, 24], type:INT8
+  T#51(DownConv_3/down_relu1_4;DownConv_3/down_bn1_4/FusedBatchNormV3;DownConv_3/down_conv1_4/Conv2D) shape:[1, 4, 26, 48], type:INT8
+  T#52(UpConv_2/up_relu0_3;UpConv_2/up_bn0_3/FusedBatchNormV3;UpConv_2/up_conv0_3/conv2d_transpose) shape:[1, 8, 52, 24], type:INT8
+  T#53(UpConv_2/Slice) shape:[1, 8, 51, 24], type:INT8
+  T#54(UpConv_2/skip_bottleneck_relu_3;UpConv_2/skip_bottleneck_bn_3/FusedBatchNormV3;UpConv_2/skip_bottleneck_3/Conv2D) shape:[1, 8, 51, 12], type:INT8
+  T#55(UpConv_2/concat) shape:[1, 8, 51, 36], type:INT8
+  T#56(UpConv_2/up_relu1_3;UpConv_2/up_bn1_3/FusedBatchNormV3;UpConv_2/up_conv1_3/Conv2D) shape:[1, 8, 51, 24], type:INT8
+  T#57(UpConv_1/up_relu0_2;UpConv_1/up_bn0_2/FusedBatchNormV3;UpConv_1/up_conv0_2/conv2d_transpose) shape:[1, 16, 102, 12], type:INT8
+  T#58(UpConv_1/Slice) shape:[1, 16, 101, 12], type:INT8
+  T#59(UpConv_1/skip_bottleneck_relu_2;UpConv_1/skip_bottleneck_bn_2/FusedBatchNormV3;UpConv_1/skip_bottleneck_2/Conv2D) shape:[1, 16, 101, 6], type:INT8
+  T#60(UpConv_1/concat) shape:[1, 16, 101, 18], type:INT8
+  T#61(UpConv_1/up_relu1_2;UpConv_1/up_bn1_2/FusedBatchNormV3;UpConv_1/up_conv1_2/Conv2D) shape:[1, 16, 101, 12], type:INT8
+  T#62(UpConv_0/up_relu0_1;UpConv_0/up_bn0_1/FusedBatchNormV3;UpConv_0/up_conv0_1/conv2d_transpose) shape:[1, 32, 202, 6], type:INT8
+  T#63(UpConv_0/Slice) shape:[1, 31, 201, 6], type:INT8
+  T#64(UpConv_0/skip_bottleneck_relu_1;UpConv_0/skip_bottleneck_bn_1/FusedBatchNormV3;UpConv_0/skip_bottleneck_1/Conv2D) shape:[1, 31, 201, 3], type:INT8
+  T#65(UpConv_0/concat) shape:[1, 31, 201, 9], type:INT8
+  T#66(UpConv_0/up_relu1_1;UpConv_0/up_bn1_1/FusedBatchNormV3;UpConv_0/up_conv1_1/Conv2D) shape:[1, 31, 201, 6], type:INT8
+  T#67(Output/output_conv/BiasAdd) shape:[1, 31, 201, 2], type:INT8
+
+---------------------------------------------------------------
+              Model size:      62880 bytes
+    Non-data buffer size:      16620 bytes (26.43 %)
+  Total data buffer size:      46260 bytes (73.57 %)
+    (Zero value buffers):         32 bytes (00.05 %)
+
+* Buffers of TFLite model are mostly used for constant tensors.
+  And zero value buffers are buffers filled with zeros.
+  Non-data buffers area are used to store operators, subgraphs and etc.
+  You can find more details from https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/schema/schema.fbs
+
