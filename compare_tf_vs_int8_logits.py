@@ -22,6 +22,14 @@ from run_tflite_on_npz_fixed import (
 )
 
 
+def set_arg_help(parser: argparse.ArgumentParser, dest: str, help_text: str) -> None:
+    for action in parser._actions:
+        if action.dest == dest:
+            action.help = help_text
+            return
+    raise RuntimeError(f"Shared parser is missing expected argument: {dest}")
+
+
 def quantize_int8(x_float: np.ndarray, scale: float, zero_point: int) -> np.ndarray:
     if scale <= 0:
         raise ValueError(f"Invalid input scale: {scale}")
@@ -57,11 +65,18 @@ def build_script_arg_parser():
         mode="pred",
         depth=4,
         filters_root=6,
+        drop_rate=0.0,
+        kernel_size=[3, 3],
+        pool_size=[2, 2],
+        dilation_rate=[1, 1],
         filters_cap=None,
         decoder_width_mult=1.0,
         skip_bottleneck_mult=1.0,
         use_skip_bottleneck=0,
     )
+    set_arg_help(parser, "depth", "model depth (default: 4)")
+    set_arg_help(parser, "filters_root", "filters root (default: 6)")
+    set_arg_help(parser, "drop_rate", "drop out rate (default: 0.0)")
     parser.add_argument("--checkpoint_dir", required=True, help=r".\model\190614-104802")
     parser.add_argument("--int8_model", required=True, help=r".\deepdenoiser_int8_builtin.tflite")
     parser.add_argument("--npz", required=True, help=r".\Dataset\pred\BK_BKS_2008110908041793.npz")
