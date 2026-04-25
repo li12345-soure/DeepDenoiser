@@ -8,10 +8,10 @@ but builds a frozen teacher graph next to the student graph.
 
 import argparse
 import logging
-import multiprocessing
 import os
 import sys
 import time
+import traceback
 from pathlib import Path
 
 os.environ["TF_USE_LEGACY_KERAS"] = "1"
@@ -32,6 +32,23 @@ from deepdenoiser.train import build_arg_parser, set_config
 DEFAULT_STUDENT_INIT_DIR = r"G:\dd_runs\B_d4_r4\260413-160200"
 DEFAULT_TEACHER_CKPT_DIR = r"G:\dd_distill_v2_logs\260417-133633"
 DEFAULT_LOG_DIR = r"G:\dd_runs\B_d4_r4_distill_v1"
+
+
+class QuietDataReader(DataReader):
+    """DataReader wrapper that suppresses expected shutdown cancellations."""
+
+    def thread_main(self, sess, n_threads=1, start=0):
+        try:
+            return super().thread_main(sess, n_threads=n_threads, start=start)
+        except (tf.errors.CancelledError, tf.errors.OutOfRangeError):
+            if self.coord is not None and self.coord.should_stop():
+                return
+            raise
+        except Exception as exc:
+            if self.coord is not None and self.coord.should_stop():
+                logging.warning("Reader thread stopped during shutdown: %s", exc)
+                return
+            raise
 
 
 def build_script_arg_parser() -> argparse.ArgumentParser:
@@ -90,17 +107,22 @@ def build_script_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--temperature", type=float, default=2.0, help="Distillation temperature")
     parser.add_argument("--kd_weight", type=float, default=1.0, help="Weight for KL distillation loss")
     parser.add_argument("--logit_mse_weight", type=float, default=0.1, help="Weight for raw-logit MSE")
+    parser.add_argument("--max_steps", type=int, default=0, help="Maximum train steps for this run; 0 means unlimited")
+    parser.add_argument("--save_every_steps", type=int, default=500, help="Save a checkpoint every N train steps")
+    parser.add_argument("--log_every_steps", type=int, default=20, help="Print train losses every N train steps")
+    parser.add_argument("--num_reader_threads", type=int, default=2, help="Number of DataReader worker threads")
+    parser.add_argument("--queue_size", type=int, default=10, help="DataReader queue capacity in batches")
     parser.add_argument(
         "--reader_threads",
         type=int,
         default=0,
-        help="Number of DataReader threads; 0 uses multiprocessing.cpu_count()",
+        help="Legacy alias for --num_reader_threads; 0 means unused",
     )
     parser.add_argument(
         "--max_steps_per_epoch",
         type=int,
         default=-1,
-        help="Optional cap for quick smoke runs; -1 uses the full training set",
+        help="Legacy smoke-test cap; prefer --max_steps",
     )
     parser.add_argument(
         "--save_every",
@@ -125,6 +147,9 @@ def normalize_args(args: argparse.Namespace) -> argparse.Namespace:
     args.kernel_size = list(args.kernel_size)
     args.pool_size = list(args.pool_size)
     args.dilation_rate = list(args.dilation_rate)
+    if args.reader_threads > 0:
+        args.num_reader_threads = int(args.reader_threads)
+    args.queue_capacity = max(int(args.queue_size), 1) * int(args.batch_size)
     return args
 
 
@@ -313,7 +338,10 @@ def write_config(log_dir: str, args: argparse.Namespace, student_config, teacher
 
 def make_log_dir(base_dir: str) -> str:
     current_time = time.strftime("%y%m%d-%H%M%S")
-    log_dir = os.path.normpath(os.path.join(base_dir, current_time)).replace("\\", "/")
+    base_path = Path(base_dir).expanduser()
+    if not base_path.is_absolute():
+        base_path = Path.cwd() / base_path
+    log_dir = os.path.normpath(str(base_path.resolve() / current_time)).replace("\\", "/")
     os.makedirs(log_dir, exist_ok=False)
     os.makedirs(os.path.join(log_dir, "figures"), exist_ok=True)
     return log_dir
@@ -321,22 +349,22 @@ def make_log_dir(base_dir: str) -> str:
 
 def build_readers(args: argparse.Namespace):
     coord = tf.train.Coordinator()
-    train_reader = DataReader(
+    train_reader = QuietDataReader(
         signal_dir=args.train_signal_dir,
         signal_list=args.train_signal_list,
         noise_dir=args.train_noise_dir,
         noise_list=args.train_noise_list,
-        queue_size=args.batch_size * 2,
+        queue_size=args.queue_capacity,
         coord=coord,
     )
     valid_reader = None
     if (args.valid_signal_list is not None) and (args.valid_noise_list is not None):
-        valid_reader = DataReader(
+        valid_reader = QuietDataReader(
             signal_dir=args.valid_signal_dir,
             signal_list=args.valid_signal_list,
             noise_dir=args.valid_noise_dir,
             noise_list=args.valid_noise_list,
-            queue_size=args.batch_size * 2,
+            queue_size=args.queue_capacity,
             coord=coord,
         )
     return coord, train_reader, valid_reader
@@ -398,6 +426,8 @@ def run_training(args: argparse.Namespace) -> int:
 
     total_loss, kd_kl, logit_mse = build_kl_distill_loss(student.logits, teacher.logits, student.hard_loss, args)
     train_op, learning_rate = build_optimizer(total_loss, student, student_trainable_vars, args)
+    with tf.control_dependencies([train_op]):
+        global_step_after_train = tf.identity(student.global_step, name="global_step_after_train")
     summary_op = build_summaries(total_loss, student.hard_loss, kd_kl, logit_mse, learning_rate)
 
     student_saver = tf.compat.v1.train.Saver(student_model_var_map, max_to_keep=5)
@@ -423,17 +453,24 @@ def run_training(args: argparse.Namespace) -> int:
     sess_config.log_device_placement = False
 
     train_steps_per_epoch = int(np.ceil(train_reader.n_signal / float(args.batch_size)))
-    if args.max_steps_per_epoch > 0:
-        train_steps_per_epoch = min(train_steps_per_epoch, args.max_steps_per_epoch)
     valid_steps_per_epoch = 0
     if valid_reader is not None:
         valid_steps_per_epoch = int(np.ceil(valid_reader.n_signal / float(args.batch_size)))
-        if args.max_steps_per_epoch > 0:
-            valid_steps_per_epoch = min(valid_steps_per_epoch, args.max_steps_per_epoch)
 
-    reader_threads = args.reader_threads if args.reader_threads > 0 else multiprocessing.cpu_count()
+    logging.info(
+        "DataReader queue_size=%d batches, batch_size=%d, effective queue_capacity=%d samples",
+        args.queue_size,
+        args.batch_size,
+        args.queue_capacity,
+    )
 
-    with tf.compat.v1.Session(config=sess_config) as sess:
+    sess = tf.compat.v1.Session(config=sess_config)
+    summary_writer = None
+    loss_log = None
+    train_threads = []
+    valid_threads = []
+    exit_code = 0
+    try:
         try:
             summary_writer = tf.compat.v1.summary.FileWriter(log_dir, sess.graph)
         except Exception as exc:
@@ -448,51 +485,104 @@ def run_training(args: argparse.Namespace) -> int:
             sess.run(student.global_step.assign(0))
             logging.info("Reset student global_step to 0 after warm start")
 
-        train_threads = train_reader.start_threads(sess, n_threads=reader_threads)
-        valid_threads = valid_reader.start_threads(sess, n_threads=reader_threads) if valid_reader is not None else []
+        train_threads = train_reader.start_threads(sess, n_threads=args.num_reader_threads)
+        valid_threads = (
+            valid_reader.start_threads(sess, n_threads=args.num_reader_threads) if valid_reader is not None else []
+        )
         loss_log = open(os.path.join(log_dir, "loss.log"), "w")
-        try:
-            mean_loss = 0.0
-            total_seen = 0
-            for epoch in range(args.epochs):
-                progress = tqdm(range(train_steps_per_epoch), desc=f"{Path(log_dir).name}: ")
-                for step in progress:
-                    x_batch, y_batch = sess.run(train_batch)
-                    feed = {
-                        x_input: x_batch,
-                        y_target: y_batch,
-                        student.drop_rate: args.student_drop_rate,
-                        student.is_training: True,
-                    }
-                    _, summary, global_step, total, task, kd, mse, lr = sess.run(
-                        [
-                            train_op,
-                            summary_op,
-                            student.global_step,
-                            total_loss,
-                            student.hard_loss,
-                            kd_kl,
-                            logit_mse,
-                            learning_rate,
-                        ],
-                        feed_dict=feed,
-                    )
-                    if summary_writer is not None:
-                        summary_writer.add_summary(summary, global_step)
-                    total_seen += 1
-                    mean_loss += (float(total) - mean_loss) / total_seen
-                    progress.set_description(
-                        f"{Path(log_dir).name}: epoch={epoch}, loss={total:.6f}, mean={mean_loss:.6f}"
-                    )
-                    loss_log.write(
-                        "Epoch: {}, step: {}, total: {}, task: {}, kd_kl: {}, logit_mse: {}, lr: {}, mean: {}\n".format(
-                            epoch, step, total, task, kd, mse, lr, mean_loss
-                        )
-                    )
-                    loss_log.flush()
 
-                if ((epoch + 1) % args.save_every) == 0:
-                    student_saver.save(sess, os.path.join(log_dir, f"model_{epoch}.ckpt"))
+        mean_loss = 0.0
+        steps_this_run = 0
+        last_global_step = 0
+
+        def save_student_checkpoint(global_step: int, final: bool = False) -> str:
+            ckpt_path = student_saver.save(
+                sess,
+                os.path.join(log_dir, f"model_{global_step}.ckpt"),
+                write_meta_graph=False,
+            )
+            final_suffix = " final=True" if final else ""
+            print(f"[SAVE] step={global_step} checkpoint={ckpt_path}{final_suffix}", flush=True)
+            return ckpt_path
+
+        def run_train_step(epoch: int, epoch_step: int, progress) -> int:
+            nonlocal mean_loss, steps_this_run, last_global_step
+
+            x_batch, y_batch = sess.run(train_batch)
+            feed = {
+                x_input: x_batch,
+                y_target: y_batch,
+                student.drop_rate: args.student_drop_rate,
+                student.is_training: True,
+            }
+            global_step, summary, total, task, kd, mse, lr = sess.run(
+                [
+                    global_step_after_train,
+                    summary_op,
+                    total_loss,
+                    student.hard_loss,
+                    kd_kl,
+                    logit_mse,
+                    learning_rate,
+                ],
+                feed_dict=feed,
+            )
+            if summary_writer is not None:
+                summary_writer.add_summary(summary, global_step)
+
+            steps_this_run += 1
+            global_step = int(global_step)
+            last_global_step = global_step
+            mean_loss += (float(total) - mean_loss) / steps_this_run
+            progress.set_description(
+                f"{Path(log_dir).name}: step={global_step}, loss={total:.6f}, mean={mean_loss:.6f}"
+            )
+            loss_log.write(
+                "step: {}, epoch: {}, epoch_step: {}, total_loss: {}, task_loss: {}, "
+                "kd_loss: {}, logit_mse_loss: {}, lr: {}, mean_loss: {}\n".format(
+                    global_step, epoch, epoch_step, total, task, kd, mse, lr, mean_loss
+                )
+            )
+            loss_log.flush()
+
+            should_log = (
+                steps_this_run == 1
+                or (steps_this_run % args.log_every_steps) == 0
+                or (args.max_steps > 0 and steps_this_run == args.max_steps)
+            )
+            if should_log:
+                print(
+                    "[TRAIN] step={} total_loss={:.6f} task_loss={:.6f} "
+                    "kd_loss={:.6f} logit_mse_loss={:.6f}".format(
+                        global_step, total, task, kd, mse
+                    ),
+                    flush=True,
+                )
+
+            if global_step > 0 and (global_step % args.save_every_steps) == 0:
+                save_student_checkpoint(global_step)
+            return global_step
+
+        if args.max_steps > 0:
+            logging.info("Running step-driven training for %d train steps", args.max_steps)
+            progress = tqdm(total=args.max_steps, desc=f"{Path(log_dir).name}: ")
+            try:
+                while steps_this_run < args.max_steps:
+                    epoch = steps_this_run // max(train_steps_per_epoch, 1)
+                    epoch_step = steps_this_run % max(train_steps_per_epoch, 1)
+                    run_train_step(epoch, epoch_step, progress)
+                    progress.update(1)
+            finally:
+                progress.close()
+        else:
+            logging.info("Running epoch-driven training for %d epochs", args.epochs)
+            epoch_train_steps = train_steps_per_epoch
+            if args.max_steps_per_epoch > 0:
+                epoch_train_steps = min(epoch_train_steps, int(args.max_steps_per_epoch))
+            for epoch in range(args.epochs):
+                progress = tqdm(range(epoch_train_steps), desc=f"{Path(log_dir).name}: ")
+                for epoch_step in progress:
+                    run_train_step(epoch, epoch_step, progress)
 
                 if valid_reader is not None and valid_steps_per_epoch > 0:
                     valid_mean = 0.0
@@ -510,28 +600,40 @@ def run_training(args: argparse.Namespace) -> int:
                         )
                         valid_mean += (float(total) - valid_mean) / (valid_step + 1)
                         loss_log.write(
-                            "Valid: {}, step: {}, total: {}, task: {}, kd_kl: {}, logit_mse: {}, mean: {}\n".format(
+                            "Valid: {}, step: {}, total_loss: {}, task_loss: {}, kd_loss: {}, "
+                            "logit_mse_loss: {}, mean_loss: {}\n".format(
                                 epoch, valid_step, total, task, kd, mse, valid_mean
                             )
                         )
                     logging.info("Epoch %d validation mean loss: %.6f", epoch, valid_mean)
-        finally:
-            loss_log.close()
-            if summary_writer is not None:
-                summary_writer.close()
-            coord.request_stop()
-            try:
-                coord.join(train_threads + valid_threads, stop_grace_period_secs=10, ignore_live_threads=True)
-            except Exception:
-                pass
-            try:
-                sess.run(train_reader.queue.close(cancel_pending_enqueues=True))
-                if valid_reader is not None:
-                    sess.run(valid_reader.queue.close(cancel_pending_enqueues=True))
-            except Exception:
-                pass
 
-    return 0
+        if last_global_step > 0:
+            save_student_checkpoint(last_global_step, final=True)
+    except Exception:
+        print("[FATAL] train_b_d4_r4_distill.py failed", flush=True)
+        traceback.print_exc()
+        exit_code = 1
+    finally:
+        if loss_log is not None:
+            loss_log.close()
+        if summary_writer is not None:
+            summary_writer.close()
+        coord.request_stop()
+        all_reader_threads = train_threads + valid_threads
+        try:
+            sess.run(train_reader.queue.close(cancel_pending_enqueues=True))
+            if valid_reader is not None:
+                sess.run(valid_reader.queue.close(cancel_pending_enqueues=True))
+        except Exception as exc:
+            logging.warning("Queue close warning during shutdown: %s", exc)
+        if all_reader_threads:
+            try:
+                coord.join(all_reader_threads, stop_grace_period_secs=5)
+            except Exception as exc:
+                logging.warning("Reader thread join warning during shutdown: %s", exc)
+        sess.close()
+
+    return exit_code
 
 
 def main() -> int:
@@ -543,9 +645,22 @@ def main() -> int:
         raise ValueError("--temperature must be > 0")
     if args.kd_weight < 0 or args.logit_mse_weight < 0:
         raise ValueError("--kd_weight and --logit_mse_weight must be >= 0")
-    if args.save_every <= 0:
-        raise ValueError("--save_every must be > 0")
-    return run_training(args)
+    if args.max_steps < 0:
+        raise ValueError("--max_steps must be >= 0")
+    if args.save_every_steps <= 0:
+        raise ValueError("--save_every_steps must be > 0")
+    if args.log_every_steps <= 0:
+        raise ValueError("--log_every_steps must be > 0")
+    if args.num_reader_threads <= 0:
+        raise ValueError("--num_reader_threads must be > 0")
+    if args.queue_size <= 0:
+        raise ValueError("--queue_size must be > 0")
+    try:
+        return run_training(args)
+    except Exception:
+        print("[FATAL] train_b_d4_r4_distill.py failed", flush=True)
+        traceback.print_exc()
+        return 1
 
 
 if __name__ == "__main__":
