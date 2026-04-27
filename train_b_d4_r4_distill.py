@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Online checkpoint distillation training for the B_d4_r4 student.
+"""Online checkpoint distillation training for a configurable student.
 
 This script intentionally does not modify deepdenoiser/train.py. It reuses the
 repo's DataReader, set_config, UNet, TensorBoard writer, and checkpoint style,
@@ -30,7 +30,7 @@ from deepdenoiser.train import build_arg_parser, set_config
 
 
 DEFAULT_STUDENT_INIT_DIR = r"G:\dd_runs\B_d4_r4\260413-160200"
-DEFAULT_TEACHER_CKPT_DIR = r"G:\dd_distill_v2_logs\260417-133633"
+DEFAULT_TEACHER_CKPT_DIR = r"G:\dd_tmp\orig_model_190614"
 DEFAULT_LOG_DIR = r"G:\dd_runs\B_d4_r4_distill_v1"
 
 
@@ -53,7 +53,7 @@ class QuietDataReader(DataReader):
 
 def build_script_arg_parser() -> argparse.ArgumentParser:
     parser = build_arg_parser()
-    parser.description = "Train B_d4_r4 with online frozen-teacher distillation"
+    parser.description = "Train a student DeepDenoiser with online frozen-teacher distillation"
     parser.set_defaults(
         mode="train",
         epochs=40,
@@ -86,6 +86,30 @@ def build_script_arg_parser() -> argparse.ArgumentParser:
         help="Student filters_root; defaults to --filters_root/4",
     )
     parser.add_argument(
+        "--student_filters_cap",
+        type=int,
+        default=None,
+        help="Student filters_cap; defaults to --filters_cap",
+    )
+    parser.add_argument(
+        "--student_decoder_width_mult",
+        type=float,
+        default=None,
+        help="Student decoder width multiplier; defaults to --decoder_width_mult",
+    )
+    parser.add_argument(
+        "--student_skip_bottleneck_mult",
+        type=float,
+        default=None,
+        help="Student skip bottleneck multiplier; defaults to --skip_bottleneck_mult",
+    )
+    parser.add_argument(
+        "--student_use_skip_bottleneck",
+        type=int,
+        default=None,
+        help="Student skip bottleneck enable flag; defaults to --use_skip_bottleneck",
+    )
+    parser.add_argument(
         "--student_drop_rate",
         type=float,
         default=None,
@@ -93,16 +117,38 @@ def build_script_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--student_init_dir",
-        default=DEFAULT_STUDENT_INIT_DIR,
-        help="Directory containing the B_d4_r4 warm-start checkpoint",
+        default=None,
+        help=(
+            "Directory containing a student warm-start checkpoint. If omitted, "
+            "the B_d4_r4 default checkpoint is used only for the default B_d4_r4 student."
+        ),
     )
     parser.add_argument(
         "--teacher_checkpoint_dir",
         default=DEFAULT_TEACHER_CKPT_DIR,
         help="Directory containing the frozen teacher checkpoint",
     )
-    parser.add_argument("--teacher_depth", type=int, default=4, help="Teacher depth")
-    parser.add_argument("--teacher_filters_root", type=int, default=6, help="Teacher filters_root")
+    parser.add_argument("--teacher_depth", type=int, default=6, help="Teacher depth")
+    parser.add_argument("--teacher_filters_root", type=int, default=8, help="Teacher filters_root")
+    parser.add_argument("--teacher_filters_cap", type=int, default=None, help="Teacher filters_cap")
+    parser.add_argument(
+        "--teacher_decoder_width_mult",
+        type=float,
+        default=1.0,
+        help="Teacher decoder width multiplier",
+    )
+    parser.add_argument(
+        "--teacher_skip_bottleneck_mult",
+        type=float,
+        default=1.0,
+        help="Teacher skip bottleneck multiplier",
+    )
+    parser.add_argument(
+        "--teacher_use_skip_bottleneck",
+        type=int,
+        default=0,
+        help="Teacher skip bottleneck enable flag",
+    )
     parser.add_argument("--teacher_drop_rate", type=float, default=0.0, help="Teacher drop_rate")
     parser.add_argument("--temperature", type=float, default=2.0, help="Distillation temperature")
     parser.add_argument("--kd_weight", type=float, default=1.0, help="Weight for KL distillation loss")
@@ -138,11 +184,34 @@ def normalize_args(args: argparse.Namespace) -> argparse.Namespace:
         args.student_depth = int(args.depth)
     if args.student_filters_root is None:
         args.student_filters_root = int(args.filters_root)
+    if args.student_filters_cap is None:
+        args.student_filters_cap = args.filters_cap
+    if args.student_decoder_width_mult is None:
+        args.student_decoder_width_mult = float(args.decoder_width_mult)
+    if args.student_skip_bottleneck_mult is None:
+        args.student_skip_bottleneck_mult = float(args.skip_bottleneck_mult)
+    if args.student_use_skip_bottleneck is None:
+        args.student_use_skip_bottleneck = int(args.use_skip_bottleneck)
     if args.student_drop_rate is None:
         args.student_drop_rate = float(args.drop_rate)
 
+    default_b_student = (
+        int(args.student_depth) == 4
+        and int(args.student_filters_root) == 4
+        and args.student_filters_cap is None
+        and float(args.student_decoder_width_mult) == 1.0
+        and int(args.student_use_skip_bottleneck) == 0
+        and float(args.student_skip_bottleneck_mult) == 1.0
+    )
+    if args.student_init_dir is None and default_b_student:
+        args.student_init_dir = DEFAULT_STUDENT_INIT_DIR
+
     args.depth = int(args.student_depth)
     args.filters_root = int(args.student_filters_root)
+    args.filters_cap = args.student_filters_cap
+    args.decoder_width_mult = float(args.student_decoder_width_mult)
+    args.skip_bottleneck_mult = float(args.student_skip_bottleneck_mult)
+    args.use_skip_bottleneck = int(args.student_use_skip_bottleneck)
     args.drop_rate = float(args.student_drop_rate)
     args.kernel_size = list(args.kernel_size)
     args.pool_size = list(args.pool_size)
@@ -162,6 +231,10 @@ def build_model_config(
     data_reader,
     depth: int,
     filters_root: int,
+    filters_cap,
+    decoder_width_mult: float,
+    skip_bottleneck_mult: float,
+    use_skip_bottleneck: int,
     drop_rate: float,
     mode: str,
     weight_decay: float,
@@ -170,6 +243,10 @@ def build_model_config(
     model_args.mode = mode
     model_args.depth = int(depth)
     model_args.filters_root = int(filters_root)
+    model_args.filters_cap = None if filters_cap is None else int(filters_cap)
+    model_args.decoder_width_mult = float(decoder_width_mult)
+    model_args.skip_bottleneck_mult = float(skip_bottleneck_mult)
+    model_args.use_skip_bottleneck = int(use_skip_bottleneck)
     model_args.drop_rate = float(drop_rate)
     model_args.weight_decay = float(weight_decay)
     model_args.distill_enable = 0
@@ -389,6 +466,10 @@ def run_training(args: argparse.Namespace) -> int:
         train_reader,
         depth=args.student_depth,
         filters_root=args.student_filters_root,
+        filters_cap=args.student_filters_cap,
+        decoder_width_mult=args.student_decoder_width_mult,
+        skip_bottleneck_mult=args.student_skip_bottleneck_mult,
+        use_skip_bottleneck=args.student_use_skip_bottleneck,
         drop_rate=args.student_drop_rate,
         mode="train",
         weight_decay=args.weight_decay,
@@ -398,6 +479,10 @@ def run_training(args: argparse.Namespace) -> int:
         train_reader,
         depth=args.teacher_depth,
         filters_root=args.teacher_filters_root,
+        filters_cap=args.teacher_filters_cap,
+        decoder_width_mult=args.teacher_decoder_width_mult,
+        skip_bottleneck_mult=args.teacher_skip_bottleneck_mult,
+        use_skip_bottleneck=args.teacher_use_skip_bottleneck,
         drop_rate=args.teacher_drop_rate,
         mode="pred",
         weight_decay=0.0,
@@ -645,6 +730,10 @@ def main() -> int:
         raise ValueError("--temperature must be > 0")
     if args.kd_weight < 0 or args.logit_mse_weight < 0:
         raise ValueError("--kd_weight and --logit_mse_weight must be >= 0")
+    if args.student_decoder_width_mult <= 0 or args.teacher_decoder_width_mult <= 0:
+        raise ValueError("student/teacher decoder width multipliers must be > 0")
+    if args.student_skip_bottleneck_mult <= 0 or args.teacher_skip_bottleneck_mult <= 0:
+        raise ValueError("student/teacher skip bottleneck multipliers must be > 0")
     if args.max_steps < 0:
         raise ValueError("--max_steps must be >= 0")
     if args.save_every_steps <= 0:
