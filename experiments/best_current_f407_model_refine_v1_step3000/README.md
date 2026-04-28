@@ -1,4 +1,4 @@
-﻿Best current B_d4_r4 refine candidate
+﻿Best current PC-side F407 candidate
 
 model:
   B_d4_r4_best_refine_v1_T6_kd1_nomse_step3000
@@ -20,17 +20,29 @@ training:
   kd_weight=1.0
   logit_mse_weight=0.0
 
-evaluation:
-  pred100 int8 TFLite vs original argmax_acc = 0.757172
-  previous step2500 pred100 int8 vs original argmax_acc = 0.755325
-  improvement ~= +0.001847
+logits / mask evaluation:
+  pred100 int8 vs original mask_argmax_acc = 0.757172
+  old step2500 pred100 mask_argmax_acc = 0.755325
+  improvement = +0.001847
 
-legacy pred20:
-  step3000 ~= 0.7916627
-  step5000 ~= 0.7917429
-  previous step2500 ~= 0.7907479
+waveform evaluation, pred100:
+  refine step3000:
+    mean waveform_rmse = 128.446374
+    mean waveform_corrcoef = 0.949308
+    mean waveform_relative_l2 = 0.306751
+    mean mask_argmax_acc = 0.757172
+    mean softmax_mae = 0.235489
+    mean softmax_rmse = 0.296143
+
+  old step2500:
+    mean waveform_rmse = 153.094750
+    mean waveform_corrcoef = 0.944004
+    mean waveform_relative_l2 = 0.335318
+    mean mask_argmax_acc = 0.755325
+    mean softmax_mae = 0.247609
+    mean softmax_rmse = 0.302679
 
 decision:
-  step3000 is recommended as the more stable new PC-side best by pred100.
-  The improvement is small; B_d4_r4 is likely near its current capacity/training ceiling.
-  PTQ is not the main bottleneck because int8 vs own TF pred100 argmax_acc = 0.992870.
+  refine step3000 is the current PC-side best.
+  It improves both logits/mask metrics and waveform reconstruction metrics over old step2500.
+  STM32 board-ready app is still based on old step2500 and should remain frozen until board validation is available.

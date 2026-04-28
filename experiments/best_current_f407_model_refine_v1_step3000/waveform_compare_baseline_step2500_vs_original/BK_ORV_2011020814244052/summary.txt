@@ -1,0 +1,7 @@
+[SUMMARY]
+  component 0: waveform_rmse=129.52014 corrcoef=0.96632835 relative_l2=0.25240636
+  component 1: waveform_rmse=129.52014 corrcoef=0.96632835 relative_l2=0.25240636
+  component 2: waveform_rmse=129.52014 corrcoef=0.96632835 relative_l2=0.25240636
+  mean waveform_rmse    : 129.52014
+  mean waveform_corrcoef: 0.96632835
+  mean mask_argmax_acc  : 0.49446317
